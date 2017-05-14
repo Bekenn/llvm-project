@@ -6595,7 +6595,9 @@ void Parser::ParseDirectDeclarator(Declarator &D) {
         !((D.getContext() == DeclaratorContext::Prototype ||
            D.getContext() == DeclaratorContext::LambdaExprParameter ||
            D.getContext() == DeclaratorContext::BlockLiteral) &&
-          NextToken().is(tok::r_paren) && !D.hasGroupingParens() &&
+          NextToken().is(tok::r_paren) &&
+          !getLangOpts().FunctionParameterPacks &&
+          !D.hasGroupingParens() &&
           !Actions.containsUnexpandedParameterPacks(D) &&
           D.getDeclSpec().getTypeSpecType() != TST_auto)) {
       SourceLocation EllipsisLoc = ConsumeToken();
@@ -7556,6 +7558,7 @@ void Parser::ParseParameterDeclarationClause(
       // parameter pack declaration.
       if (Tok.is(tok::ellipsis) &&
           (NextToken().isNot(tok::r_paren) ||
+           getLangOpts().FunctionParameterPacks ||
            (!ParmDeclarator.getEllipsisLoc().isValid() &&
             !Actions.isUnexpandedParameterPackPermitted())) &&
           Actions.containsUnexpandedParameterPacks(ParmDeclarator))
@@ -7664,7 +7667,7 @@ void Parser::ParseParameterDeclarationClause(
     }
 
     if (TryConsumeToken(tok::ellipsis, EllipsisLoc)) {
-      if (getLangOpts().CPlusPlus26) {
+      if (getLangOpts().CPlusPlus26 && !getLangOpts().FunctionParameterPacks) {
         // C++26 [dcl.dcl.fct]p3:
         //   A parameter-declaration-clause of the form
         //   parameter-list '...' is deprecated.
@@ -7672,7 +7675,7 @@ void Parser::ParseParameterDeclarationClause(
             << FixItHint::CreateInsertion(EllipsisLoc, ", ");
       }
 
-      if (!getLangOpts().CPlusPlus) {
+      if (!getLangOpts().CPlusPlus || getLangOpts().FunctionParameterPacks) {
         // We have ellipsis without a preceding ',', which is ill-formed
         // in C. Complain and provide the fix.
         Diag(EllipsisLoc, diag::err_missing_comma_before_ellipsis)

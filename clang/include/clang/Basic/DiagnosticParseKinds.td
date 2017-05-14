@@ -423,7 +423,7 @@ def err_missing_param : Error<"expected parameter declarator">;
 def err_function_scope_depth_exceeded : Error<
   "function scope depth exceeded maximum of %0">, DefaultFatal;
 def err_missing_comma_before_ellipsis : Error<
-  "C requires a comma prior to the ellipsis in a variadic function type">;
+  "comma required prior to the ellipsis in a variadic function type">;
 def warn_deprecated_missing_comma_before_ellipsis : Warning<
   "declaration of a variadic function without a comma before '...' is deprecated">,
   InGroup<DeprecatedMissingCommaVariadicParam>;
