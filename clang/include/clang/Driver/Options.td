@@ -1933,6 +1933,11 @@ defm addrsig : BoolFOption<"addrsig",
           " an address-significance table">>;
 defm blocks : OptInCC1FFlag<"blocks", "Enable the 'blocks' language feature",
                             "", "", [ClangOption, CLOption]>;
+defm func_parm_packs : BoolFOption<"func-parm-packs",
+  LangOpts<"FunctionParameterPacks">, DefaultFalse,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option], "Enable">,
+  NegFlag<SetFalse, [], [ClangOption], "Disable">,
+  BothFlags<[], [ClangOption], " homogeneous function parameter packs">>;
 def fbootclasspath_EQ : Joined<["-"], "fbootclasspath=">, Group<f_Group>;
 defm borland_extensions : BoolFOption<"borland-extensions",
   LangOpts<"Borland">, DefaultFalse,
