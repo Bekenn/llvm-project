@@ -104,7 +104,8 @@ public:
 
   bool
   LoadExternalSpecializations(const Decl *D,
-                              ArrayRef<TemplateArgument> TemplateArgs) override;
+                              ArrayRef<TemplateArgument> TemplateArgs,
+                              UnsignedOrNone PackSize) override;
 
   /// Ensures that the table of all visible declarations inside this
   /// context is up to date.

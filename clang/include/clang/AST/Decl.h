@@ -2094,6 +2094,9 @@ private:
   /// \param TemplateArgs the template arguments that produced this
   /// function template specialization from the template.
   ///
+  /// \param PackSize the number of function arguments in a trailing
+  /// function parameter pack.
+  ///
   /// \param InsertPos If non-NULL, the position in the function template
   /// specialization set where the function template specialization data will
   /// be inserted.
@@ -2106,8 +2109,8 @@ private:
   /// specialization was first instantiated.
   void setFunctionTemplateSpecialization(
       ASTContext &C, FunctionTemplateDecl *Template,
-      TemplateArgumentList *TemplateArgs, void *InsertPos,
-      TemplateSpecializationKind TSK,
+      TemplateArgumentList *TemplateArgs, unsigned PackSize,
+      void *InsertPos, TemplateSpecializationKind TSK,
       const TemplateArgumentListInfo *TemplateArgsAsWritten,
       SourceLocation PointOfInstantiation);
 
@@ -3034,6 +3037,9 @@ public:
   /// \param TemplateArgs the template arguments that produced this
   /// function template specialization from the template.
   ///
+  /// \param PackSize the number of function arguments in a trailing
+  /// function parameter pack.
+  ///
   /// \param InsertPos If non-NULL, the position in the function template
   /// specialization set where the function template specialization data will
   /// be inserted.
@@ -3046,12 +3052,13 @@ public:
   /// specialization was first instantiated.
   void setFunctionTemplateSpecialization(
       FunctionTemplateDecl *Template, TemplateArgumentList *TemplateArgs,
-      void *InsertPos,
+      unsigned PackSize, void *InsertPos,
       TemplateSpecializationKind TSK = TSK_ImplicitInstantiation,
       TemplateArgumentListInfo *TemplateArgsAsWritten = nullptr,
       SourceLocation PointOfInstantiation = SourceLocation()) {
     setFunctionTemplateSpecialization(getASTContext(), Template, TemplateArgs,
-                                      InsertPos, TSK, TemplateArgsAsWritten,
+                                      PackSize, InsertPos, TSK,
+                                      TemplateArgsAsWritten,
                                       PointOfInstantiation);
   }
 

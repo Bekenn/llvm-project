@@ -26,6 +26,7 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/PointerUnion.h"
@@ -34,6 +35,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <cassert>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 using namespace clang;
@@ -361,7 +363,8 @@ void RedeclarableTemplateDecl::loadLazySpecializationsImpl(
 }
 
 bool RedeclarableTemplateDecl::loadLazySpecializationsImpl(
-    ArrayRef<TemplateArgument> Args, TemplateParameterList *TPL) const {
+    ArrayRef<TemplateArgument> Args, UnsignedOrNone PackSize,
+    TemplateParameterList *TPL) const {
   auto *ExternalSource = getASTContext().getExternalSource();
   if (!ExternalSource)
     return false;
@@ -373,7 +376,7 @@ bool RedeclarableTemplateDecl::loadLazySpecializationsImpl(
                                                        /*OnlyPartial=*/false);
 
   return ExternalSource->LoadExternalSpecializations(this->getCanonicalDecl(),
-                                                     Args);
+                                                     Args, PackSize);
 }
 
 template <class EntryType, typename... ProfileArguments>
@@ -417,10 +420,17 @@ void RedeclarableTemplateDecl::addSpecializationImpl(
     // specialization with the same hash. This is fine, as long as the next
     // call to findSpecializationImpl does not find a matching Decl for the
     // template arguments.
-    loadLazySpecializationsImpl(Args);
     void *CorrectInsertPos;
-    assert(!findSpecializationImpl(Specializations, CorrectInsertPos, Args) &&
-           InsertPos == CorrectInsertPos &&
+    bool Found;
+    if constexpr (std::is_same_v<EntryType, FunctionTemplateSpecializationInfo>) {
+      loadLazySpecializationsImpl(Args, Entry->PackSize);
+      Found = findSpecializationImpl(Specializations, CorrectInsertPos, Args,
+                                     Entry->PackSize);
+    } else {
+      loadLazySpecializationsImpl(Args);
+      Found = findSpecializationImpl(Specializations, CorrectInsertPos, Args);
+    }
+    assert(!Found && InsertPos == CorrectInsertPos &&
            "given incorrect InsertPos for specialization");
 #endif
     Specializations.InsertNode(Entry, InsertPos);
@@ -476,9 +486,10 @@ FunctionTemplateDecl::getSpecializations() const {
 
 FunctionDecl *
 FunctionTemplateDecl::findSpecialization(ArrayRef<TemplateArgument> Args,
+                                         unsigned PackSize,
                                          void *&InsertPos) {
   auto *Common = getCommonPtr();
-  return findSpecializationImpl(Common->Specializations, InsertPos, Args);
+  return findSpecializationImpl(Common->Specializations, InsertPos, Args, PackSize);
 }
 
 void FunctionTemplateDecl::addSpecialization(
@@ -949,8 +960,8 @@ TemplateArgumentList::CreateCopy(ASTContext &Context,
 FunctionTemplateSpecializationInfo *FunctionTemplateSpecializationInfo::Create(
     ASTContext &C, FunctionDecl *FD, FunctionTemplateDecl *Template,
     TemplateSpecializationKind TSK, TemplateArgumentList *TemplateArgs,
-    const TemplateArgumentListInfo *TemplateArgsAsWritten, SourceLocation POI,
-    MemberSpecializationInfo *MSInfo) {
+    unsigned PackSize, const TemplateArgumentListInfo *TemplateArgsAsWritten,
+    SourceLocation POI, MemberSpecializationInfo *MSInfo) {
   const ASTTemplateArgumentListInfo *ArgsAsWritten = nullptr;
   if (TemplateArgsAsWritten)
     ArgsAsWritten = ASTTemplateArgumentListInfo::Create(C,
@@ -959,7 +970,7 @@ FunctionTemplateSpecializationInfo *FunctionTemplateSpecializationInfo::Create(
   void *Mem =
       C.Allocate(totalSizeToAlloc<MemberSpecializationInfo *>(MSInfo ? 1 : 0));
   return new (Mem) FunctionTemplateSpecializationInfo(
-      FD, Template, TSK, TemplateArgs, ArgsAsWritten, POI, MSInfo);
+      FD, Template, TSK, TemplateArgs, PackSize, ArgsAsWritten, POI, MSInfo);
 }
 
 //===----------------------------------------------------------------------===//

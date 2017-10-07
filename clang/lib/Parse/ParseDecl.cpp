@@ -2138,8 +2138,9 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
     D.setTemplateParameterLists(*TemplateInfo.TemplateParams);
 
   bool IsTemplateSpecOrInst =
-      (TemplateInfo.Kind == ParsedTemplateKind::ExplicitInstantiation ||
-       TemplateInfo.Kind == ParsedTemplateKind::ExplicitSpecialization);
+      TemplateInfo.Kind == ParsedTemplateKind::ExplicitInstantiation ||
+      (TemplateInfo.Kind == ParsedTemplateKind::Template &&
+          TemplateInfo.LastParameterListWasEmpty);
   SuppressAccessChecks SAC(*this, IsTemplateSpecOrInst);
 
   ParseDeclarator(D);
@@ -2248,14 +2249,12 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
               // Recover as if it were an explicit specialization.
               TemplateParameterLists FakedParamLists;
               FakedParamLists.push_back(Actions.ActOnTemplateParameterList(
-                  0, SourceLocation(), TemplateInfo.TemplateLoc, LAngleLoc, {},
+                  SourceLocation(), TemplateInfo.TemplateLoc, LAngleLoc, {},
                   LAngleLoc, nullptr));
 
               TheDecl = ParseFunctionDefinition(
                   D,
-                  ParsedTemplateInfo(&FakedParamLists,
-                                     /*isSpecialization=*/true,
-                                     /*lastParameterListWasEmpty=*/true),
+                  ParsedTemplateInfo(&FakedParamLists),
                   &LateParsedAttrs);
             }
           } else {
@@ -2523,12 +2522,22 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
     ThisDecl = Actions.ActOnDeclarator(getCurScope(), D);
     break;
 
-  case ParsedTemplateKind::Template:
-  case ParsedTemplateKind::ExplicitSpecialization: {
+  case ParsedTemplateKind::Template: {
     ThisDecl = Actions.ActOnTemplateDeclarator(getCurScope(),
                                                *TemplateInfo.TemplateParams,
                                                D);
-    if (VarTemplateDecl *VT = dyn_cast_or_null<VarTemplateDecl>(ThisDecl)) {
+    if (VarDecl *VD = dyn_cast_or_null<VarDecl>(ThisDecl)) {
+      if (VD->getTemplateSpecializationKind() == TSK_ExplicitSpecialization &&
+          !isa<VarTemplatePartialSpecializationDecl>(VD)) {
+        if (auto scope = getCurScope()->getTemplateParamParent()) {
+          if (scope->decl_empty()) {
+            auto flags = scope->getFlags() & ~Scope::TemplateParamScope;
+            scope->setFlags(flags);
+          }
+        }
+      }
+    }
+    else if (VarTemplateDecl *VT = dyn_cast_or_null<VarTemplateDecl>(ThisDecl)) {
       // Re-direct this decl to refer to the templated decl so that we can
       // initialize it.
       ThisDecl = VT->getTemplatedDecl();
@@ -2566,7 +2575,7 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
         // Recover as if it were an explicit specialization.
         TemplateParameterLists FakedParamLists;
         FakedParamLists.push_back(Actions.ActOnTemplateParameterList(
-            0, SourceLocation(), TemplateInfo.TemplateLoc, LAngleLoc, {},
+            SourceLocation(), TemplateInfo.TemplateLoc, LAngleLoc, {},
             LAngleLoc, nullptr));
 
         ThisDecl =
@@ -3414,8 +3423,9 @@ void Parser::ParseDeclarationSpecifiers(
     // Turn off usual access checking for template specializations and
     // instantiations.
     bool IsTemplateSpecOrInst =
-        (TemplateInfo.Kind == ParsedTemplateKind::ExplicitInstantiation ||
-         TemplateInfo.Kind == ParsedTemplateKind::ExplicitSpecialization);
+        TemplateInfo.Kind == ParsedTemplateKind::ExplicitInstantiation ||
+        (TemplateInfo.Kind == ParsedTemplateKind::Template &&
+            TemplateInfo.LastParameterListWasEmpty);
 
     switch (Tok.getKind()) {
     default:
@@ -5009,7 +5019,8 @@ void Parser::ParseEnumSpecifier(SourceLocation StartLoc, DeclSpec &DS,
   // specifier.
   bool shouldDelayDiagsInTag =
     (TemplateInfo.Kind == ParsedTemplateKind::ExplicitInstantiation ||
-     TemplateInfo.Kind == ParsedTemplateKind::ExplicitSpecialization);
+     (TemplateInfo.Kind == ParsedTemplateKind::Template &&
+      TemplateInfo.LastParameterListWasEmpty));
   SuppressAccessChecks diagsFromTag(*this, shouldDelayDiagsInTag);
 
   // Determine whether this declaration is permitted to have an enum-base.
@@ -6862,7 +6873,6 @@ void Parser::ParseDirectDeclarator(Declarator &D) {
       ParseFunctionDeclarator(D, attrs, T, IsAmbiguous);
       if (IsFunctionDeclaration)
         Actions.ActOnFinishFunctionDeclarationDeclarator(D);
-      PrototypeScope.Exit();
     } else if (Tok.is(tok::l_square)) {
       ParseBracketDeclarator(D);
     } else if (Tok.isRegularKeywordAttribute()) {

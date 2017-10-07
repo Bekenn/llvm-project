@@ -66,6 +66,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
 #include "clang/Basic/TokenKinds.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "clang/Basic/Version.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
@@ -8378,7 +8379,7 @@ bool ASTReader::LoadExternalSpecializations(const Decl *D, bool OnlyPartial) {
 
 bool ASTReader::LoadExternalSpecializationsImpl(
     SpecLookupTableTy &SpecLookups, const Decl *D,
-    ArrayRef<TemplateArgument> TemplateArgs) {
+    ArrayRef<TemplateArgument> TemplateArgs, UnsignedOrNone PackSize) {
   assert(D);
 
   auto It = SpecLookups.find(D);
@@ -8395,7 +8396,7 @@ bool ASTReader::LoadExternalSpecializationsImpl(
   });
 
   Deserializing LookupResults(this);
-  auto HashValue = StableHashForTemplateArguments(TemplateArgs);
+  auto HashValue = StableHashForTemplateArguments(TemplateArgs, PackSize);
 
   // Get Decl may violate the iterator from SpecLookups
   llvm::SmallVector<serialization::reader::LazySpecializationInfo, 8> Infos =
@@ -8413,13 +8414,14 @@ bool ASTReader::LoadExternalSpecializationsImpl(
 }
 
 bool ASTReader::LoadExternalSpecializations(
-    const Decl *D, ArrayRef<TemplateArgument> TemplateArgs) {
+    const Decl *D, ArrayRef<TemplateArgument> TemplateArgs,
+    UnsignedOrNone PackSize) {
   assert(D);
 
   bool NewDeclsFound = LoadExternalSpecializationsImpl(
-      PartialSpecializationsLookups, D, TemplateArgs);
+      PartialSpecializationsLookups, D, TemplateArgs, PackSize);
   NewDeclsFound |=
-      LoadExternalSpecializationsImpl(SpecializationsLookups, D, TemplateArgs);
+      LoadExternalSpecializationsImpl(SpecializationsLookups, D, TemplateArgs, PackSize);
 
   return NewDeclsFound;
 }

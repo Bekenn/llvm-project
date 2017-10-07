@@ -5229,7 +5229,7 @@ Decl *SemaObjC::ActOnObjCExceptionDecl(Scope *S, Declarator &D) {
   // Check that there are no default arguments inside the type of this
   // exception object (C++ only).
   if (getLangOpts().CPlusPlus)
-    SemaRef.CheckExtraCXXDefaultArguments(D);
+    SemaRef.CheckExtraCXXDefaultArgumentsAndPacks(D);
 
   TypeSourceInfo *TInfo = SemaRef.GetTypeForDeclarator(D);
   QualType ExceptionType = TInfo->getType();

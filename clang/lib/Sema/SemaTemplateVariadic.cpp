@@ -679,20 +679,23 @@ TypeResult Sema::ActOnPackExpansion(ParsedType Type,
     return true;
 
   TypeSourceInfo *TSResult =
-      CheckPackExpansion(TSInfo, EllipsisLoc, std::nullopt);
+      CheckPackExpansionType(TSInfo, EllipsisLoc, std::nullopt,
+      /*AllowHomogeneous*/false);
   if (!TSResult)
     return true;
 
   return CreateParsedType(TSResult->getType(), TSResult);
 }
 
-TypeSourceInfo *Sema::CheckPackExpansion(TypeSourceInfo *Pattern,
-                                         SourceLocation EllipsisLoc,
-                                         UnsignedOrNone NumExpansions) {
+TypeSourceInfo *Sema::CheckPackExpansionType(TypeSourceInfo *Pattern,
+                                             SourceLocation EllipsisLoc,
+                                             UnsignedOrNone NumExpansions,
+                                             bool AllowHomogeneous) {
   // Create the pack expansion type and source-location information.
-  QualType Result = CheckPackExpansion(Pattern->getType(),
-                                       Pattern->getTypeLoc().getSourceRange(),
-                                       EllipsisLoc, NumExpansions);
+  QualType Result = CheckPackExpansionType(Pattern->getType(),
+                                           Pattern->getTypeLoc().getSourceRange(),
+                                           EllipsisLoc, NumExpansions,
+                                           AllowHomogeneous);
   if (Result.isNull())
     return nullptr;
 
@@ -704,9 +707,10 @@ TypeSourceInfo *Sema::CheckPackExpansion(TypeSourceInfo *Pattern,
   return TLB.getTypeSourceInfo(Context, Result);
 }
 
-QualType Sema::CheckPackExpansion(QualType Pattern, SourceRange PatternRange,
-                                  SourceLocation EllipsisLoc,
-                                  UnsignedOrNone NumExpansions) {
+QualType Sema::CheckPackExpansionType(QualType Pattern, SourceRange PatternRange,
+                                      SourceLocation EllipsisLoc,
+                                      UnsignedOrNone NumExpansions,
+                                      bool AllowHomogeneous) {
   // C++11 [temp.variadic]p5:
   //   The pattern of a pack expansion shall name one or more
   //   parameter packs that are not expanded by a nested pack
@@ -714,10 +718,11 @@ QualType Sema::CheckPackExpansion(QualType Pattern, SourceRange PatternRange,
   //
   // A pattern containing a deduced type can't occur "naturally" but arises in
   // the desugaring of an init-capture pack.
-  if (!Pattern->containsUnexpandedParameterPack() &&
+  if ((!LangOpts.FunctionParameterPacks || !AllowHomogeneous) &&
+      !Pattern->containsUnexpandedParameterPack() &&
       !Pattern->getContainedDeducedType()) {
     Diag(EllipsisLoc, diag::err_pack_expansion_without_parameter_packs)
-      << PatternRange;
+    << PatternRange;
     return QualType();
   }
 

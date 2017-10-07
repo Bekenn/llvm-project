@@ -22449,7 +22449,7 @@ TypeResult SemaOpenMP::ActOnOpenMPDeclareMapperVarDecl(Scope *S,
 
   if (getLangOpts().CPlusPlus) {
     // Check that there are no default arguments (C++ only).
-    SemaRef.CheckExtraCXXDefaultArguments(D);
+    SemaRef.CheckExtraCXXDefaultArgumentsAndPacks(D);
   }
 
   return SemaRef.CreateParsedType(T, TInfo);

@@ -77,10 +77,8 @@ enum class ExtraSemiKind {
 enum class ParsedTemplateKind {
   /// We are not parsing a template at all.
   NonTemplate = 0,
-  /// We are parsing a template declaration.
+  /// We are parsing a template declaration or explicit specialization.
   Template,
-  /// We are parsing an explicit specialization.
-  ExplicitSpecialization,
   /// We are parsing an explicit instantiation.
   ExplicitInstantiation
 };
@@ -7921,15 +7919,13 @@ private:
   /// specifiers.
   struct ParsedTemplateInfo {
     ParsedTemplateInfo()
-        : Kind(ParsedTemplateKind::NonTemplate), TemplateParams(nullptr) {}
+        : Kind(ParsedTemplateKind::NonTemplate), TemplateParams(nullptr),
+          LastParameterListWasEmpty(false) {}
 
-    ParsedTemplateInfo(TemplateParameterLists *TemplateParams,
-                       bool isSpecialization,
-                       bool lastParameterListWasEmpty = false)
-        : Kind(isSpecialization ? ParsedTemplateKind::ExplicitSpecialization
-                                : ParsedTemplateKind::Template),
-          TemplateParams(TemplateParams),
-          LastParameterListWasEmpty(lastParameterListWasEmpty) {}
+    explicit ParsedTemplateInfo(TemplateParameterLists *TemplateParams)
+        : Kind(ParsedTemplateKind::Template), TemplateParams(TemplateParams),
+          LastParameterListWasEmpty(TemplateParams && TemplateParams->size() &&
+                                    !(*TemplateParams)[TemplateParams->size() - 1]->size()) {}
 
     explicit ParsedTemplateInfo(SourceLocation ExternLoc,
                                 SourceLocation TemplateLoc)

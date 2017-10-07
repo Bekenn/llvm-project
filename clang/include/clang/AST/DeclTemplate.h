@@ -482,6 +482,9 @@ public:
   /// specialization from the function template.
   TemplateArgumentList *TemplateArguments;
 
+  /// The number of elements in a deduced function parameter pack.
+  unsigned PackSize;
+
   /// The template arguments as written in the sources, if provided.
   /// FIXME: Normally null; tail-allocate this.
   const ASTTemplateArgumentListInfo *TemplateArgumentsAsWritten;
@@ -494,10 +497,11 @@ private:
   FunctionTemplateSpecializationInfo(
       FunctionDecl *FD, FunctionTemplateDecl *Template,
       TemplateSpecializationKind TSK, TemplateArgumentList *TemplateArgs,
+      unsigned PackSize,
       const ASTTemplateArgumentListInfo *TemplateArgsAsWritten,
       SourceLocation POI, MemberSpecializationInfo *MSInfo)
       : Function(FD, MSInfo ? true : false), Template(Template, TSK - 1),
-        TemplateArguments(TemplateArgs),
+        TemplateArguments(TemplateArgs), PackSize(PackSize),
         TemplateArgumentsAsWritten(TemplateArgsAsWritten),
         PointOfInstantiation(POI) {
     if (MSInfo)
@@ -512,6 +516,7 @@ public:
   static FunctionTemplateSpecializationInfo *
   Create(ASTContext &C, FunctionDecl *FD, FunctionTemplateDecl *Template,
          TemplateSpecializationKind TSK, TemplateArgumentList *TemplateArgs,
+         unsigned PackSize,
          const TemplateArgumentListInfo *TemplateArgsAsWritten,
          SourceLocation POI, MemberSpecializationInfo *MSInfo);
 
@@ -595,15 +600,17 @@ public:
   }
 
   void Profile(llvm::FoldingSetNodeID &ID) {
-    Profile(ID, TemplateArguments->asArray(), getFunction()->getASTContext());
+    Profile(ID, TemplateArguments->asArray(), PackSize,
+            getFunction()->getASTContext());
   }
 
   static void
   Profile(llvm::FoldingSetNodeID &ID, ArrayRef<TemplateArgument> TemplateArgs,
-          const ASTContext &Context) {
+          unsigned PackSize, const ASTContext &Context) {
     ID.AddInteger(TemplateArgs.size());
     for (const TemplateArgument &TemplateArg : TemplateArgs)
       TemplateArg.Profile(ID, Context);
+    ID.AddInteger(PackSize);
   }
 };
 
@@ -771,7 +778,13 @@ protected:
   void loadLazySpecializationsImpl(bool OnlyPartial = false) const;
 
   bool loadLazySpecializationsImpl(ArrayRef<TemplateArgument> Args,
+                                   UnsignedOrNone PackSize = std::nullopt,
                                    TemplateParameterList *TPL = nullptr) const;
+
+  bool loadLazySpecializationsImpl(llvm::ArrayRef<TemplateArgument> Args,
+                                   TemplateParameterList *TPL) const {
+    return loadLazySpecializationsImpl(Args, std::nullopt, TPL);
+  }
 
   template <class EntryType, typename... ProfileArguments>
   typename SpecEntryTraits<EntryType>::DeclType *
@@ -1027,6 +1040,7 @@ public:
   /// Return the specialization with the provided arguments if it exists,
   /// otherwise return the insertion point.
   FunctionDecl *findSpecialization(ArrayRef<TemplateArgument> Args,
+                                   unsigned PackSize,
                                    void *&InsertPos);
 
   FunctionTemplateDecl *getCanonicalDecl() override {
@@ -1086,7 +1100,7 @@ public:
     // form a new template parameter list, we can simply observe the last
     // parameter to determine if such a thing happened.
     const TemplateParameterList *TPL = getTemplateParameters();
-    return TPL->getParam(TPL->size() - 1)->isImplicit();
+    return !TPL->empty() && TPL->getParam(TPL->size() - 1)->isImplicit();
   }
 
   /// Merge \p Prev with our RedeclarableTemplateDecl::Common.

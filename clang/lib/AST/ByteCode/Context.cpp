@@ -429,12 +429,14 @@ const Function *Context::getOrCreateFunction(const FunctionDecl *FuncDecl) {
       assert(MD->isFunctionTemplateSpecialization() &&
              "A generic lambda's static-invoker function must be a "
              "template specialization");
-      const TemplateArgumentList *TAL = MD->getTemplateSpecializationArgs();
+      auto *SpecInfo = MD->getTemplateSpecializationInfo();
+      const TemplateArgumentList *TAL = SpecInfo->TemplateArguments;
+      unsigned PackSize = SpecInfo->PackSize;
       FunctionTemplateDecl *CallOpTemplate =
           LambdaCallOp->getDescribedFunctionTemplate();
       void *InsertPos = nullptr;
       const FunctionDecl *CorrespondingCallOpSpecialization =
-          CallOpTemplate->findSpecialization(TAL->asArray(), InsertPos);
+          CallOpTemplate->findSpecialization(TAL->asArray(), PackSize, InsertPos);
       assert(CorrespondingCallOpSpecialization);
       FuncDecl = CorrespondingCallOpSpecialization;
     }

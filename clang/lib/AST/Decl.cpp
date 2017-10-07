@@ -4285,8 +4285,8 @@ FunctionDecl::getTemplateSpecializationArgsAsWritten() const {
 
 void FunctionDecl::setFunctionTemplateSpecialization(
     ASTContext &C, FunctionTemplateDecl *Template,
-    TemplateArgumentList *TemplateArgs, void *InsertPos,
-    TemplateSpecializationKind TSK,
+    TemplateArgumentList *TemplateArgs, unsigned PackSize,
+    void *InsertPos, TemplateSpecializationKind TSK,
     const TemplateArgumentListInfo *TemplateArgsAsWritten,
     SourceLocation PointOfInstantiation) {
   assert((TemplateOrSpecialization.isNull() ||
@@ -4300,7 +4300,7 @@ void FunctionDecl::setFunctionTemplateSpecialization(
          "Member specialization must be an explicit specialization");
   FunctionTemplateSpecializationInfo *Info =
       FunctionTemplateSpecializationInfo::Create(
-          C, this, Template, TSK, TemplateArgs, TemplateArgsAsWritten,
+          C, this, Template, TSK, TemplateArgs, PackSize, TemplateArgsAsWritten,
           PointOfInstantiation,
           dyn_cast_if_present<MemberSpecializationInfo *>(
               TemplateOrSpecialization));

@@ -633,8 +633,9 @@ private:
       if (!NewDI)
         return nullptr;
       NewDI =
-          SemaRef.CheckPackExpansion(NewDI, PackTL.getEllipsisLoc(),
-                                     PackTL.getTypePtr()->getNumExpansions());
+          SemaRef.CheckPackExpansionType(NewDI, PackTL.getEllipsisLoc(),
+                                         PackTL.getTypePtr()->getNumExpansions(),
+                                         /*AllowHomogeneous*/ true);
     } else
       NewDI = SemaRef.SubstType(OldDI, Args, OldParam->getLocation(),
                                 OldParam->getDeclName());
@@ -1203,7 +1204,8 @@ BuildDeductionGuideForTypeAlias(Sema &SemaRef,
       TemplateArgumentList::CreateCopy(Context, TemplateArgsForBuildingFPrime);
   // Form the f' by substituting the template arguments into f.
   if (auto *FPrime = SemaRef.InstantiateFunctionDeclaration(
-          F, TemplateArgListForBuildingFPrime, AliasTemplate->getLocation(),
+          F, TemplateArgListForBuildingFPrime, std::nullopt,
+          AliasTemplate->getLocation(),
           Sema::CodeSynthesisContext::BuildingDeductionGuides)) {
     auto *GG = cast<CXXDeductionGuideDecl>(FPrime);
 

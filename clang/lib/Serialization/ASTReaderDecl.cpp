@@ -941,6 +941,7 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
     // Template arguments.
     SmallVector<TemplateArgument, 8> TemplArgs;
     Record.readTemplateArgumentList(TemplArgs, /*Canonicalize*/ true);
+    unsigned PackSize = Record.readInt();
 
     // Template args as written.
     TemplateArgumentListInfo TemplArgsWritten;
@@ -966,7 +967,7 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
 
     FunctionTemplateSpecializationInfo *FTInfo =
         FunctionTemplateSpecializationInfo::Create(
-            C, FD, Template, TSK, TemplArgList,
+            C, FD, Template, TSK, TemplArgList, PackSize,
             HasTemplateArgumentsAsWritten ? &TemplArgsWritten : nullptr, POI,
             MSInfo);
     FD->TemplateOrSpecialization = FTInfo;
@@ -981,7 +982,7 @@ void ASTDeclReader::VisitFunctionDecl(FunctionDecl *FD) {
       // We avoid getASTContext because a decl in the parent hierarchy may
       // be initializing.
       llvm::FoldingSetNodeID ID;
-      FunctionTemplateSpecializationInfo::Profile(ID, TemplArgs, C);
+      FunctionTemplateSpecializationInfo::Profile(ID, TemplArgs, PackSize, C);
       void *InsertPos = nullptr;
       FunctionTemplateDecl::Common *CommonPtr = CanonTemplate->getCommonPtr();
       FunctionTemplateSpecializationInfo *ExistingInfo =

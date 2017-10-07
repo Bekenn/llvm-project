@@ -578,6 +578,7 @@ enum class TemplateSubstitutionKind : char {
     Sema::ArgPackSubstIndexRAII SubstIndex;
     DeclContext *Owner;
     const MultiLevelTemplateArgumentList &TemplateArgs;
+    UnsignedOrNone PackSize;
     Sema::LateInstantiatedAttrVec* LateAttrs = nullptr;
     LocalInstantiationScope *StartingScope = nullptr;
     // Whether to evaluate the C++20 constraints or simply substitute into them.
@@ -601,9 +602,10 @@ enum class TemplateSubstitutionKind : char {
 
   public:
     TemplateDeclInstantiator(Sema &SemaRef, DeclContext *Owner,
-                             const MultiLevelTemplateArgumentList &TemplateArgs)
+                             const MultiLevelTemplateArgumentList &TemplateArgs,
+                             UnsignedOrNone PackSize = std::nullopt)
         : SemaRef(SemaRef), SubstIndex(SemaRef, SemaRef.ArgPackSubstIndex),
-          Owner(Owner), TemplateArgs(TemplateArgs) {}
+          Owner(Owner), TemplateArgs(TemplateArgs), PackSize(PackSize) {}
 
     void setEvaluateConstraints(bool B) {
       EvaluateConstraints = B;

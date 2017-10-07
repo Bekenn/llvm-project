@@ -7828,7 +7828,7 @@ Sema::ActOnCastExpr(Scope *S, SourceLocation LParenLoc,
 
   if (getLangOpts().CPlusPlus) {
     // Check that there are no default arguments (C++ only).
-    CheckExtraCXXDefaultArguments(D);
+    CheckExtraCXXDefaultArgumentsAndPacks(D);
   }
 
   checkUnusedDeclAttributes(D);

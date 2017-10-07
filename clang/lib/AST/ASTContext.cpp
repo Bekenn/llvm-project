@@ -6045,7 +6045,8 @@ TemplateArgument ASTContext::getInjectedTemplateArg(NamedDecl *Param) const {
 QualType ASTContext::getPackExpansionType(QualType Pattern,
                                           UnsignedOrNone NumExpansions,
                                           bool ExpectPackInType) const {
-  assert((!ExpectPackInType || Pattern->containsUnexpandedParameterPack()) &&
+  assert((!ExpectPackInType || getLangOpts().FunctionParameterPacks ||
+          Pattern->containsUnexpandedParameterPack()) &&
          "Pack expansions must expand one or more parameter packs");
 
   llvm::FoldingSetNodeID ID;
@@ -7946,6 +7947,9 @@ const ArrayType *ASTContext::getAsArrayType(QualType T) const {
 QualType ASTContext::getAdjustedParameterType(QualType T) const {
   if (getLangOpts().HLSL && T->isConstantArrayType())
     return getArrayParameterType(T);
+  const PackExpansionType* PackType = T->getAs<PackExpansionType>();
+  if (PackType && !PackType->getPattern()->containsUnexpandedParameterPack())
+    return getPackExpansionType(getAdjustedParameterType(PackType->getPattern()), PackType->getNumExpansions());
   if (T->isArrayType() || T->isFunctionType())
     return getDecayedType(T);
   return T;

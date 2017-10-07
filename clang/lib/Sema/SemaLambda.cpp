@@ -16,6 +16,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/MangleNumberingContext.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Lookup.h"
@@ -232,7 +233,8 @@ UnsignedOrNone clang::getStackIndexOfNearestEnclosingCaptureCapableLambda(
 
 static inline TemplateParameterList *
 getGenericLambdaTemplateParameterList(LambdaScopeInfo *LSI, Sema &SemaRef) {
-  if (!LSI->GLTemplateParameterList && !LSI->TemplateParams.empty()) {
+  if (!LSI->GLTemplateParameterList && (!LSI->TemplateParams.empty()
+          || LSI->ContainsHomogeneousParameterPack)) {
     LSI->GLTemplateParameterList = TemplateParameterList::Create(
         SemaRef.Context,
         /*Template kw loc*/ SourceLocation(),
@@ -2505,7 +2507,8 @@ bool Sema::addInstantiatedCapturesToScope(
 Sema::LambdaScopeForCallOperatorInstantiationRAII::
     LambdaScopeForCallOperatorInstantiationRAII(
         Sema &SemaRef, FunctionDecl *FD, MultiLevelTemplateArgumentList MLTAL,
-        LocalInstantiationScope &Scope, bool ShouldAddDeclsFromParentScope)
+        UnsignedOrNone PackSize, LocalInstantiationScope &Scope,
+        bool ShouldAddDeclsFromParentScope)
     : FunctionScopeRAII(SemaRef) {
   if (!isLambdaCallOperator(FD)) {
     FunctionScopeRAII::disable();
@@ -2542,7 +2545,7 @@ Sema::LambdaScopeForCallOperatorInstantiationRAII::
   //
 
   for (auto [FDPattern, FD] : llvm::reverse(InstantiationAndPatterns)) {
-    SemaRef.addInstantiatedParametersToScope(FD, FDPattern, Scope, MLTAL);
+    SemaRef.addInstantiatedParametersToScope(FD, FDPattern, Scope, MLTAL, PackSize);
     SemaRef.addInstantiatedLocalVarsToScope(FD, FDPattern, Scope);
 
     if (isLambdaCallOperator(FD))

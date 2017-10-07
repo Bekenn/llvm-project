@@ -3086,11 +3086,13 @@ void CodeGenFunction::EmitLambdaDelegatingInvokeBody(const CXXMethodDecl *MD,
   // to which the call to the static-invoker shall be forwarded.
   if (Lambda->isGenericLambda()) {
     assert(MD->isFunctionTemplateSpecialization());
-    const TemplateArgumentList *TAL = MD->getTemplateSpecializationArgs();
+    FunctionTemplateSpecializationInfo *Info = MD->getTemplateSpecializationInfo();
+    const TemplateArgumentList *TAL = Info->TemplateArguments;
+    unsigned PackSize = Info->PackSize;
     FunctionTemplateDecl *CallOpTemplate = CallOp->getDescribedFunctionTemplate();
     void *InsertPos = nullptr;
     FunctionDecl *CorrespondingCallOpSpecialization =
-        CallOpTemplate->findSpecialization(TAL->asArray(), InsertPos);
+        CallOpTemplate->findSpecialization(TAL->asArray(), PackSize, InsertPos);
     assert(CorrespondingCallOpSpecialization);
     CallOp = cast<CXXMethodDecl>(CorrespondingCallOpSpecialization);
   }

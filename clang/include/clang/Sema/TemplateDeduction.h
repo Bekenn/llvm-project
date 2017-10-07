@@ -185,6 +185,9 @@ public:
   /// diagnostics.
   diag_iterator diag_end() const { return SuppressedDiagnostics.end(); }
 
+  /// The number of elements in a trailing homogeneous parameter pack.
+  UnsignedOrNone PackSize = std::nullopt;
+
   /// The template parameter to which a template argument
   /// deduction failure refers.
   ///

@@ -684,7 +684,8 @@ private:
                                        const Decl *D);
   bool LoadExternalSpecializationsImpl(SpecLookupTableTy &SpecLookups,
                                        const Decl *D,
-                                       ArrayRef<TemplateArgument> TemplateArgs);
+                                       ArrayRef<TemplateArgument> TemplateArgs,
+                                       UnsignedOrNone PackSize);
 
   // Updates for visible decls can occur for other contexts than just the
   // TU, and when we read those update records, the actual context may not
@@ -2184,7 +2185,8 @@ public:
 
   bool
   LoadExternalSpecializations(const Decl *D,
-                              ArrayRef<TemplateArgument> TemplateArgs) override;
+                              ArrayRef<TemplateArgument> TemplateArgs,
+                              UnsignedOrNone PackSize) override;
 
   /// Finds all the visible declarations with a given name.
   /// The current implementation of this method just loads the entire

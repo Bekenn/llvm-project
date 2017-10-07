@@ -174,7 +174,8 @@ public:
   /// Return true if any new specializations get loaded. Return false otherwise.
   virtual bool
   LoadExternalSpecializations(const Decl *D,
-                              ArrayRef<TemplateArgument> TemplateArgs);
+                              ArrayRef<TemplateArgument> TemplateArgs,
+                              UnsignedOrNone PackSize);
 
   /// Ensures that the table of all visible declarations inside this
   /// context is up to date.

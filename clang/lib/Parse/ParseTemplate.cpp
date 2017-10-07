@@ -14,6 +14,7 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/Basic/DiagnosticParse.h"
+#include "clang/Basic/TokenKinds.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
@@ -78,8 +79,6 @@ Parser::DeclGroupPtrTy Parser::ParseTemplateDeclarationOrSpecialization(
   // defining A<T>::B receives just the inner template parameter list
   // (and retrieves the outer template parameter list from its
   // context).
-  bool isSpecialization = true;
-  bool LastParamListWasEmpty = false;
   TemplateParameterLists ParamLists;
   TemplateParameterDepthRAII CurTemplateDepthTracker(TemplateParameterDepth);
 
@@ -108,10 +107,8 @@ Parser::DeclGroupPtrTy Parser::ParseTemplateDeclarationOrSpecialization(
     }
 
     ExprResult OptionalRequiresClauseConstraintER;
-    if (!TemplateParams.empty()) {
-      isSpecialization = false;
+    if (!TemplateParams.empty() || getLangOpts().FunctionParameterPacks) {
       ++CurTemplateDepthTracker;
-
       if (TryConsumeToken(tok::kw_requires)) {
         OptionalRequiresClauseConstraintER =
             Actions.ActOnRequiresClause(ParseConstraintLogicalOrExpression(
@@ -123,17 +120,14 @@ Parser::DeclGroupPtrTy Parser::ParseTemplateDeclarationOrSpecialization(
           return nullptr;
         }
       }
-    } else {
-      LastParamListWasEmpty = true;
     }
 
     ParamLists.push_back(Actions.ActOnTemplateParameterList(
-        CurTemplateDepthTracker.getDepth(), ExportLoc, TemplateLoc, LAngleLoc,
-        TemplateParams, RAngleLoc, OptionalRequiresClauseConstraintER.get()));
+        ExportLoc, TemplateLoc, LAngleLoc, TemplateParams, RAngleLoc,
+        OptionalRequiresClauseConstraintER.get()));
   } while (Tok.isOneOf(tok::kw_export, tok::kw_template));
 
-  ParsedTemplateInfo TemplateInfo(&ParamLists, isSpecialization,
-                                  LastParamListWasEmpty);
+  ParsedTemplateInfo TemplateInfo(&ParamLists);
 
   // Parse the actual template declaration.
   if (Tok.is(tok::kw_concept)) {
@@ -773,7 +767,7 @@ NamedDecl *Parser::ParseTemplateTemplateParameter(unsigned Depth,
     DiagnoseMisplacedEllipsis(EllipsisLoc, NameLoc, AlreadyHasEllipsis, true);
 
   TemplateParameterList *ParamList = Actions.ActOnTemplateParameterList(
-      Depth, SourceLocation(), TemplateLoc, LAngleLoc, TemplateParams,
+      SourceLocation(), TemplateLoc, LAngleLoc, TemplateParams,
       RAngleLoc, OptionalRequiresClauseConstraintER.get());
 
   // Grab a default argument (if available).

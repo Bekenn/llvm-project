@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/TemplateBase.h"
+#include "clang/Basic/UnsignedOrNone.h"
 
 namespace clang {
 namespace serialization {
@@ -28,7 +29,8 @@ namespace serialization {
 /// in which case the ODR hash can differ across translation units for
 /// non-dependent, canonical template arguments that are spelled differently
 /// but have the same meaning. But it is not easy to raise examples.
-unsigned StableHashForTemplateArguments(llvm::ArrayRef<TemplateArgument> Args);
+unsigned StableHashForTemplateArguments(llvm::ArrayRef<TemplateArgument> Args,
+                                        UnsignedOrNone PackSize);
 
 } // namespace serialization
 } // namespace clang

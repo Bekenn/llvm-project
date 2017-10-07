@@ -1760,8 +1760,7 @@ bool Sema::ConstraintExpressionDependsOnEnclosingTemplate(
 }
 
 TemplateParameterList *
-Sema::ActOnTemplateParameterList(unsigned Depth,
-                                 SourceLocation ExportLoc,
+Sema::ActOnTemplateParameterList(SourceLocation ExportLoc,
                                  SourceLocation TemplateLoc,
                                  SourceLocation LAngleLoc,
                                  ArrayRef<NamedDecl *> Params,
@@ -9530,8 +9529,8 @@ bool Sema::CheckFunctionTemplateSpecialization(
   TemplateArgumentList *TemplArgs = TemplateArgumentList::CreateCopy(
       Context, Specialization->getTemplateSpecializationArgs()->asArray());
   FD->setFunctionTemplateSpecialization(
-      Specialization->getPrimaryTemplate(), TemplArgs, /*InsertPos=*/nullptr,
-      SpecInfo->getTemplateSpecializationKind(),
+      Specialization->getPrimaryTemplate(), TemplArgs, SpecInfo->PackSize,
+      /*InsertPos=*/nullptr, SpecInfo->getTemplateSpecializationKind(),
       ExplicitTemplateArgs ? &ConvertedTemplateArgs[Specialization] : nullptr);
 
   // A function template specialization inherits the target attributes

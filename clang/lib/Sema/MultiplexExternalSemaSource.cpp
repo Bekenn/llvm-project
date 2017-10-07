@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "clang/Sema/MultiplexExternalSemaSource.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "clang/Sema/Lookup.h"
 
 using namespace clang;
@@ -134,11 +135,12 @@ bool MultiplexExternalSemaSource::LoadExternalSpecializations(
 }
 
 bool MultiplexExternalSemaSource::LoadExternalSpecializations(
-    const Decl *D, ArrayRef<TemplateArgument> TemplateArgs) {
+    const Decl *D, ArrayRef<TemplateArgument> TemplateArgs,
+    UnsignedOrNone PackSize) {
   bool AnyNewSpecsLoaded = false;
   for (size_t i = 0; i < Sources.size(); ++i)
     AnyNewSpecsLoaded |=
-        Sources[i]->LoadExternalSpecializations(D, TemplateArgs);
+        Sources[i]->LoadExternalSpecializations(D, TemplateArgs, PackSize);
   return AnyNewSpecsLoaded;
 }
 

@@ -4131,10 +4131,6 @@ public:
   void CheckForFunctionRedefinition(
       FunctionDecl *FD, const FunctionDecl *EffectiveDefinition = nullptr,
       SkipBodyInfo *SkipBody = nullptr);
-  Decl *ActOnStartOfFunctionDef(Scope *S, Declarator &D,
-                                MultiTemplateParamsArg TemplateParamLists,
-                                SkipBodyInfo *SkipBody = nullptr,
-                                FnBodyKind BodyKind = FnBodyKind::Other);
   Decl *ActOnStartOfFunctionDef(Scope *S, Decl *D,
                                 SkipBodyInfo *SkipBody = nullptr,
                                 FnBodyKind BodyKind = FnBodyKind::Other);
@@ -6248,12 +6244,12 @@ public:
   /// Helpers for dealing with blocks and functions.
   void CheckCXXDefaultArguments(FunctionDecl *FD);
 
-  /// CheckExtraCXXDefaultArguments - Check for any extra default
-  /// arguments in the declarator, which is not a function declaration
-  /// or definition and therefore is not permitted to have default
-  /// arguments. This routine should be invoked for every declarator
+  /// CheckExtraCXXDefaultArgumentsAndPacks - Check for any extra default
+  /// arguments and parameter packs in the declarator, which is not a function
+  /// declaration or definition and therefore is not permitted to have default
+  /// arguments or packs. This routine should be invoked for every declarator
   /// that is not a function declaration or definition.
-  void CheckExtraCXXDefaultArguments(Declarator &D);
+  void CheckExtraCXXDefaultArgumentsAndPacks(Declarator &D);
 
   CXXSpecialMemberKind getSpecialMember(const CXXMethodDecl *MD) {
     return getDefaultedFunctionKind(MD).asSpecialMember();
@@ -9157,7 +9153,7 @@ public:
   public:
     LambdaScopeForCallOperatorInstantiationRAII(
         Sema &SemasRef, FunctionDecl *FD, MultiLevelTemplateArgumentList MLTAL,
-        LocalInstantiationScope &Scope,
+        UnsignedOrNone PackSize, LocalInstantiationScope &Scope,
         bool ShouldAddDeclsFromParentScope = true);
   };
 
@@ -11486,7 +11482,7 @@ public:
   /// constrained by RequiresClause, that contains the template parameters in
   /// Params.
   TemplateParameterList *ActOnTemplateParameterList(
-      unsigned Depth, SourceLocation ExportLoc, SourceLocation TemplateLoc,
+      SourceLocation ExportLoc, SourceLocation TemplateLoc,
       SourceLocation LAngleLoc, ArrayRef<NamedDecl *> Params,
       SourceLocation RAngleLoc, Expr *RequiresClause);
 
@@ -13549,8 +13545,9 @@ public:
   /// instantiating an exception-specification.
   TypeSourceInfo *SubstFunctionDeclType(
       TypeSourceInfo *T, const MultiLevelTemplateArgumentList &TemplateArgs,
-      SourceLocation Loc, DeclarationName Entity, CXXRecordDecl *ThisContext,
-      Qualifiers ThisTypeQuals, bool EvaluateConstraints = true);
+      UnsignedOrNone PackSize, SourceLocation Loc, DeclarationName Entity,
+      CXXRecordDecl *ThisContext, Qualifiers ThisTypeQuals,
+      bool EvaluateConstraints = true);
   void SubstExceptionSpec(FunctionDecl *New, const FunctionProtoType *Proto,
                           const MultiLevelTemplateArgumentList &Args);
   bool SubstExceptionSpec(SourceLocation Loc,
@@ -13569,6 +13566,7 @@ public:
   bool SubstParmTypes(SourceLocation Loc, ArrayRef<ParmVarDecl *> Params,
                       const FunctionProtoType::ExtParameterInfo *ExtParamInfos,
                       const MultiLevelTemplateArgumentList &TemplateArgs,
+                      UnsignedOrNone PackSize,
                       SmallVectorImpl<QualType> &ParamTypes,
                       SmallVectorImpl<ParmVarDecl *> *OutParams,
                       ExtParameterInfoBuilder &ParamInfos);
@@ -13958,7 +13956,7 @@ public:
   /// used in its place.
   FunctionDecl *InstantiateFunctionDeclaration(
       FunctionTemplateDecl *FTD, const TemplateArgumentList *Args,
-      SourceLocation Loc,
+      UnsignedOrNone PackSize, SourceLocation Loc,
       CodeSynthesisContext::SynthesisKind CSC =
           CodeSynthesisContext::ExplicitTemplateArgumentSubstitution);
 
@@ -14081,7 +14079,8 @@ public:
                           const MultiLevelTemplateArgumentList &TemplateArgs);
 
   Decl *SubstDecl(Decl *D, DeclContext *Owner,
-                  const MultiLevelTemplateArgumentList &TemplateArgs);
+                  const MultiLevelTemplateArgumentList &TemplateArgs,
+                  UnsignedOrNone PackSize = std::nullopt);
 
   /// Substitute the name and return type of a defaulted 'operator<=>' to form
   /// an implicit 'operator=='.
@@ -14114,7 +14113,8 @@ private:
   bool addInstantiatedParametersToScope(
       FunctionDecl *Function, const FunctionDecl *PatternDecl,
       LocalInstantiationScope &Scope,
-      const MultiLevelTemplateArgumentList &TemplateArgs);
+      const MultiLevelTemplateArgumentList &TemplateArgs,
+      UnsignedOrNone PackSize);
 
   /// Introduce the instantiated captures of the lambda into the local
   /// instantiation scope.
@@ -14414,15 +14414,17 @@ public:
 
   /// Construct a pack expansion type from the pattern of the pack
   /// expansion.
-  TypeSourceInfo *CheckPackExpansion(TypeSourceInfo *Pattern,
-                                     SourceLocation EllipsisLoc,
-                                     UnsignedOrNone NumExpansions);
+  TypeSourceInfo *CheckPackExpansionType(TypeSourceInfo *Pattern,
+                                         SourceLocation EllipsisLoc,
+                                         UnsignedOrNone NumExpansions,
+                                         bool AllowHomogeneous);
 
   /// Construct a pack expansion type from the pattern of the pack
   /// expansion.
-  QualType CheckPackExpansion(QualType Pattern, SourceRange PatternRange,
-                              SourceLocation EllipsisLoc,
-                              UnsignedOrNone NumExpansions);
+  QualType CheckPackExpansionType(QualType Pattern, SourceRange PatternRange,
+                                  SourceLocation EllipsisLoc,
+                                  UnsignedOrNone NumExpansions,
+                                  bool AllowHomogeneous);
 
   /// Invoked when parsing an expression followed by an ellipsis, which
   /// creates a pack expansion.
@@ -14752,6 +14754,7 @@ public:
   bool CheckFunctionTemplateConstraints(SourceLocation PointOfInstantiation,
                                         FunctionDecl *Decl,
                                         ArrayRef<TemplateArgument> TemplateArgs,
+                                        UnsignedOrNone PackSize,
                                         ConstraintSatisfaction &Satisfaction);
 
   /// \brief Emit diagnostics explaining why a constraint expression was deemed
@@ -14817,6 +14820,7 @@ private:
   bool
   SetupConstraintScope(FunctionDecl *FD,
                        std::optional<ArrayRef<TemplateArgument>> TemplateArgs,
+                       UnsignedOrNone PackSize,
                        const MultiLevelTemplateArgumentList &MLTAL,
                        LocalInstantiationScope &Scope);
 
@@ -14826,7 +14830,7 @@ private:
   std::optional<MultiLevelTemplateArgumentList>
   SetupConstraintCheckingTemplateArgumentsAndScope(
       FunctionDecl *FD, std::optional<ArrayRef<TemplateArgument>> TemplateArgs,
-      LocalInstantiationScope &Scope);
+      UnsignedOrNone PackSize, LocalInstantiationScope &Scope);
 
   ///@}
 

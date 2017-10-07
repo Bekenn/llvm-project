@@ -312,3 +312,8 @@ namespace resolved_nttp {
 
   using TC2 = decltype(C<bool, 2, 3>::p); // expected-note {{instantiation of}}
 }
+
+namespace require_template_parameters {
+  template<> using NoParm1 = int; // expected-error {{extraneous 'template<>' in declaration}}
+  template using NoParm2 = int; // expected-error {{explicit instantiation}}
+}

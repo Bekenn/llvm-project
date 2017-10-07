@@ -727,6 +727,9 @@ public:
   /// Whether this contains an unexpanded parameter pack.
   bool ContainsUnexpandedParameterPack = false;
 
+  /// Whether this contains a homogeneous parameter pack (e.g. int...).
+  bool ContainsHomogeneousParameterPack = false;
+
   /// ReturnType - The target type of return statements in this context,
   /// or null if unknown.
   QualType ReturnType;
@@ -967,9 +970,11 @@ public:
   }
 
   /// Is this scope known to be for a generic lambda? (This will be false until
-  /// we parse a template parameter list or the first 'auto'-typed parameter).
+  /// we parse a template parameter list, the first 'auto'-typed parameter, or
+  /// a homogeneous parameter pack.)
   bool isGenericLambda() const {
-    return !TemplateParams.empty() || GLTemplateParameterList;
+    return !TemplateParams.empty() || ContainsHomogeneousParameterPack ||
+        GLTemplateParameterList;
   }
 
   /// Add a variable that might potentially be captured by the

@@ -56,6 +56,7 @@
 #include "clang/Basic/Specifiers.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "clang/Basic/Version.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/HeaderSearchOptions.h"
@@ -4516,16 +4517,21 @@ public:
 
 unsigned CalculateODRHashForSpecs(const Decl *Spec) {
   ArrayRef<TemplateArgument> Args;
+  UnsignedOrNone PackSize = std::nullopt;
   if (auto *CTSD = dyn_cast<ClassTemplateSpecializationDecl>(Spec))
     Args = CTSD->getTemplateArgs().asArray();
   else if (auto *VTSD = dyn_cast<VarTemplateSpecializationDecl>(Spec))
     Args = VTSD->getTemplateArgs().asArray();
-  else if (auto *FD = dyn_cast<FunctionDecl>(Spec))
-    Args = FD->getTemplateSpecializationArgs()->asArray();
+  else if (auto *FD = dyn_cast<FunctionDecl>(Spec)) {
+    if (auto *Info = FD->getTemplateSpecializationInfo()) {
+      Args = Info->TemplateArguments->asArray();
+      PackSize = Info->PackSize;
+    }
+  }
   else
     llvm_unreachable("New Specialization Kind?");
 
-  return StableHashForTemplateArguments(Args);
+  return StableHashForTemplateArguments(Args, PackSize);
 }
 } // namespace
 

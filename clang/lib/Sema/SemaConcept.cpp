@@ -16,6 +16,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprConcepts.h"
 #include "clang/Basic/OperatorPrecedence.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Overload.h"
@@ -696,6 +697,7 @@ bool Sema::CheckConstraintSatisfaction(
 
 bool Sema::SetupConstraintScope(
     FunctionDecl *FD, std::optional<ArrayRef<TemplateArgument>> TemplateArgs,
+    UnsignedOrNone PackSize,
     const MultiLevelTemplateArgumentList &MLTAL,
     LocalInstantiationScope &Scope) {
   assert(!isLambdaCallOperator(FD) &&
@@ -720,7 +722,8 @@ bool Sema::SetupConstraintScope(
       MultiLevelTemplateArgumentList JustTemplArgs(FD, SpecArgs->asArray(),
                                                    /*Final=*/false);
       if (addInstantiatedParametersToScope(
-              FD, PrimaryTemplate->getTemplatedDecl(), Scope, JustTemplArgs))
+              FD, PrimaryTemplate->getTemplatedDecl(), Scope, JustTemplArgs,
+              PackSize))
         return true;
     }
 
@@ -729,7 +732,7 @@ bool Sema::SetupConstraintScope(
     if (FunctionTemplateDecl *FromMemTempl =
             PrimaryTemplate->getInstantiatedFromMemberTemplate()) {
       if (addInstantiatedParametersToScope(FD, FromMemTempl->getTemplatedDecl(),
-                                           Scope, MLTAL))
+                                           Scope, MLTAL, PackSize))
         return true;
     }
 
@@ -753,7 +756,8 @@ bool Sema::SetupConstraintScope(
 
     // Case where this was not a template, but instantiated as a
     // child-function.
-    if (addInstantiatedParametersToScope(FD, InstantiatedFrom, Scope, MLTAL))
+    if (addInstantiatedParametersToScope(FD, InstantiatedFrom, Scope, MLTAL,
+        std::nullopt))
       return true;
   }
 
@@ -765,7 +769,7 @@ bool Sema::SetupConstraintScope(
 std::optional<MultiLevelTemplateArgumentList>
 Sema::SetupConstraintCheckingTemplateArgumentsAndScope(
     FunctionDecl *FD, std::optional<ArrayRef<TemplateArgument>> TemplateArgs,
-    LocalInstantiationScope &Scope) {
+    UnsignedOrNone PackSize, LocalInstantiationScope &Scope) {
   MultiLevelTemplateArgumentList MLTAL;
 
   // Collect the list of template arguments relative to the 'primary' template.
@@ -780,7 +784,7 @@ Sema::SetupConstraintCheckingTemplateArgumentsAndScope(
   // Lambdas are handled by LambdaScopeForCallOperatorInstantiationRAII.
   if (isLambdaCallOperator(FD))
     return MLTAL;
-  if (SetupConstraintScope(FD, TemplateArgs, MLTAL, Scope))
+  if (SetupConstraintScope(FD, TemplateArgs, PackSize, MLTAL, Scope))
     return std::nullopt;
 
   return MLTAL;
@@ -827,7 +831,7 @@ bool Sema::CheckFunctionConstraints(const FunctionDecl *FD,
   LocalInstantiationScope Scope(*this, !ForOverloadResolution);
   std::optional<MultiLevelTemplateArgumentList> MLTAL =
       SetupConstraintCheckingTemplateArgumentsAndScope(
-          const_cast<FunctionDecl *>(FD), {}, Scope);
+          const_cast<FunctionDecl *>(FD), {}, std::nullopt, Scope);
 
   if (!MLTAL)
     return true;
@@ -841,7 +845,7 @@ bool Sema::CheckFunctionConstraints(const FunctionDecl *FD,
   CXXThisScopeRAII ThisScope(*this, Record, ThisQuals, Record != nullptr);
 
   LambdaScopeForCallOperatorInstantiationRAII LambdaScope(
-      *this, const_cast<FunctionDecl *>(FD), *MLTAL, Scope,
+      *this, const_cast<FunctionDecl *>(FD), *MLTAL, std::nullopt, Scope,
       ForOverloadResolution);
 
   return CheckConstraintSatisfaction(
@@ -1103,7 +1107,7 @@ static bool CheckFunctionConstraintsWithoutInstantiation(
 
 bool Sema::CheckFunctionTemplateConstraints(
     SourceLocation PointOfInstantiation, FunctionDecl *Decl,
-    ArrayRef<TemplateArgument> TemplateArgs,
+    ArrayRef<TemplateArgument> TemplateArgs, UnsignedOrNone PackSize,
     ConstraintSatisfaction &Satisfaction) {
   // In most cases we're not going to have constraints, so check for that first.
   FunctionTemplateDecl *Template = Decl->getPrimaryTemplate();
@@ -1129,7 +1133,7 @@ bool Sema::CheckFunctionTemplateConstraints(
 
   std::optional<MultiLevelTemplateArgumentList> MLTAL =
       SetupConstraintCheckingTemplateArgumentsAndScope(Decl, TemplateArgs,
-                                                       Scope);
+                                                       PackSize, Scope);
 
   if (!MLTAL)
     return true;
@@ -1143,7 +1147,7 @@ bool Sema::CheckFunctionTemplateConstraints(
 
   CXXThisScopeRAII ThisScope(*this, Record, ThisQuals, Record != nullptr);
   LambdaScopeForCallOperatorInstantiationRAII LambdaScope(*this, Decl, *MLTAL,
-                                                          Scope);
+                                                          PackSize, Scope);
 
   return CheckConstraintSatisfaction(Template, TemplateAC, *MLTAL,
                                      PointOfInstantiation, Satisfaction);

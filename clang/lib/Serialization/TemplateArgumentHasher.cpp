@@ -14,6 +14,7 @@
 #include "clang/AST/DeclarationName.h"
 #include "clang/AST/TypeVisitor.h"
 #include "clang/Basic/IdentifierTable.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/TimeProfiler.h"
 
@@ -405,11 +406,13 @@ void TemplateArgumentHasher::AddType(const Type *T) {
 } // namespace
 
 unsigned clang::serialization::StableHashForTemplateArguments(
-    llvm::ArrayRef<TemplateArgument> Args) {
+    llvm::ArrayRef<TemplateArgument> Args, UnsignedOrNone PackSize) {
   llvm::TimeTraceScope TimeScope("Stable Hash for Template Arguments");
   TemplateArgumentHasher Hasher;
   Hasher.AddInteger(Args.size());
   for (TemplateArgument Arg : Args)
     Hasher.AddTemplateArgument(Arg);
+  if (PackSize)
+    Hasher.AddInteger(*PackSize);
   return Hasher.getValue();
 }

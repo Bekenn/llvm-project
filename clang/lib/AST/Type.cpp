@@ -3890,11 +3890,18 @@ CanThrowResult FunctionProtoType::canThrow() const {
 }
 
 bool FunctionProtoType::isTemplateVariadic() const {
-  for (unsigned ArgIdx = getNumParams(); ArgIdx; --ArgIdx)
-    if (isa<PackExpansionType>(getParamType(ArgIdx - 1)))
+  for (unsigned ParmIdx = getNumParams(); ParmIdx; --ParmIdx)
+    if (isa<PackExpansionType>(getParamType(ParmIdx - 1)))
       return true;
 
   return false;
+}
+
+bool FunctionProtoType::isTemplateHomogeneousVariadic() const {
+  unsigned NumParams = getNumParams();
+  return NumParams && isa<PackExpansionType>(getParamType(NumParams - 1)) &&
+    !getParamType(NumParams - 1)->getAs<PackExpansionType>()
+    ->getPattern()->containsUnexpandedParameterPack();
 }
 
 void FunctionProtoType::Profile(llvm::FoldingSetNodeID &ID, QualType Result,

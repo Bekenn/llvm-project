@@ -18,6 +18,7 @@
 #include "clang/Basic/ASTSourceDescriptor.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/Basic/UnsignedOrNone.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <cstdint>
 #include <optional>
@@ -105,7 +106,7 @@ bool ExternalASTSource::LoadExternalSpecializations(const Decl *D, bool) {
 }
 
 bool ExternalASTSource::LoadExternalSpecializations(
-    const Decl *D, ArrayRef<TemplateArgument>) {
+    const Decl *D, ArrayRef<TemplateArgument>, UnsignedOrNone) {
   return false;
 }
 

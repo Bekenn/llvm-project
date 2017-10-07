@@ -865,7 +865,8 @@ private:
 
     // Look for unexpanded packs in the pattern.
     Collect(Pattern);
-    assert(!Packs.empty() && "Pack expansion without unexpanded packs?");
+    assert((S.getLangOpts().FunctionParameterPacks || !Packs.empty()) &&
+           "Pack expansion without unexpanded packs?");
 
     unsigned NumNamedPacks = Packs.size();
 
@@ -889,8 +890,9 @@ private:
 
     // This pack expansion will have been partially or fully expanded if
     // it only names explicitly-specified parameter packs (including the
-    // partially-substituted one, if any).
-    bool IsExpanded = true;
+    // partially-substituted one, if any).  The pack is not expanded if it
+    // is a homogeneous pack.
+    bool IsExpanded = NumNamedPacks > 0;
     for (unsigned I = 0; I != NumNamedPacks; ++I) {
       if (Packs[I].Index >= Info.getNumExplicitArgs()) {
         IsExpanded = false;
@@ -1098,6 +1100,9 @@ public:
       *Loc = Result;
     }
 
+    // If this is a homogeneous pack, record its size.
+    if (Packs.size() == 0)
+      Info.PackSize = PackElements;
     return TemplateDeductionResult::Success;
   }
 
@@ -3512,7 +3517,8 @@ TemplateDeductionResult Sema::SubstituteExplicitTemplateArguments(
   TemplateParameterList *TemplateParams
     = FunctionTemplate->getTemplateParameters();
 
-  if (ExplicitTemplateArgs.size() == 0) {
+  if (ExplicitTemplateArgs.size() == 0 &&
+      (!Info.PackSize || *Info.PackSize == 0)) {
     // No arguments to substitute; just copy over the parameter types and
     // fill in the function type.
     for (auto *P : Function->parameters())
@@ -3611,8 +3617,8 @@ TemplateDeductionResult Sema::SubstituteExplicitTemplateArguments(
   // in lexical order.
   if (Proto->hasTrailingReturn()) {
     if (SubstParmTypes(Function->getLocation(), Function->parameters(),
-                       Proto->getExtParameterInfosOrNull(), MLTAL, ParamTypes,
-                       /*params=*/nullptr, ExtParamInfos))
+                       Proto->getExtParameterInfosOrNull(), MLTAL, Info.PackSize,
+                       ParamTypes, /*params=*/nullptr, ExtParamInfos))
       return TemplateDeductionResult::SubstitutionFailure;
   }
 
@@ -3653,8 +3659,8 @@ TemplateDeductionResult Sema::SubstituteExplicitTemplateArguments(
   // explicitly-specified template arguments if we didn't do so earlier.
   if (!Proto->hasTrailingReturn() &&
       SubstParmTypes(Function->getLocation(), Function->parameters(),
-                     Proto->getExtParameterInfosOrNull(), MLTAL, ParamTypes,
-                     /*params*/ nullptr, ExtParamInfos))
+                     Proto->getExtParameterInfosOrNull(), MLTAL, Info.PackSize,
+                     ParamTypes, /*params*/ nullptr, ExtParamInfos))
     return TemplateDeductionResult::SubstitutionFailure;
 
   if (FunctionType) {
@@ -3945,7 +3951,8 @@ TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
     if (CheckFunctionTemplateConstraints(
             Info.getLocation(),
             FunctionTemplate->getCanonicalDecl()->getTemplatedDecl(),
-            CTAI.CanonicalConverted, Info.AssociatedConstraintsSatisfaction))
+            CTAI.CanonicalConverted, Info.PackSize,
+            Info.AssociatedConstraintsSatisfaction))
       return TemplateDeductionResult::MiscellaneousDeductionFailure;
     if (!Info.AssociatedConstraintsSatisfaction.IsSatisfied) {
       Info.reset(Info.takeSugared(), TemplateArgumentList::CreateCopy(
@@ -3969,7 +3976,7 @@ TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
       FunctionTemplate, CanonicalDeducedArgumentList->asArray(),
       /*Final=*/false);
   Specialization = cast_or_null<FunctionDecl>(
-      SubstDecl(FD, Owner, SubstArgs));
+      SubstDecl(FD, Owner, SubstArgs, Info.PackSize));
   if (!Specialization || Specialization->isInvalidDecl())
     return TemplateDeductionResult::SubstitutionFailure;
 
@@ -4002,7 +4009,7 @@ TemplateDeductionResult Sema::FinishTemplateArgumentDeduction(
   if (IsLambda && !IsIncomplete) {
     if (CheckFunctionTemplateConstraints(
             Info.getLocation(), Specialization, CTAI.CanonicalConverted,
-            Info.AssociatedConstraintsSatisfaction))
+            Info.PackSize, Info.AssociatedConstraintsSatisfaction))
       return TemplateDeductionResult::MiscellaneousDeductionFailure;
 
     if (!Info.AssociatedConstraintsSatisfaction.IsSatisfied) {
@@ -4496,9 +4503,7 @@ TemplateDeductionResult Sema::DeduceTemplateArguments(
   else if (TooManyArguments(NumParams, Args.size() + ExplicitObjectOffset,
                             PartialOverloading)) {
     const auto *Proto = Function->getType()->castAs<FunctionProtoType>();
-    if (Proto->isTemplateVariadic())
-      /* Do nothing */;
-    else if (!Proto->isVariadic())
+    if (!Proto->isVariadic() && !Proto->isTemplateVariadic())
       return TemplateDeductionResult::TooManyArguments;
   }
 
@@ -4743,6 +4748,14 @@ TemplateDeductionResult Sema::DeduceTemplateArguments(
   TemplateParameterList *TemplateParams
     = FunctionTemplate->getTemplateParameters();
   QualType FunctionType = Function->getType();
+  const FunctionProtoType* Proto = FunctionType->getAs<FunctionProtoType>();
+  if (Proto->isTemplateHomogeneousVariadic()) {
+    // We can't figure out the size of the parameter pack without something to
+    // deduce against.
+    if (ArgFunctionType.isNull())
+      return TemplateDeductionResult::MiscellaneousDeductionFailure;
+    Info.PackSize = ArgFunctionType->getAs<FunctionProtoType>()->getNumParams() - (Proto->getNumParams() - 1);
+  }
 
   // Substitute any explicit template arguments.
   LocalInstantiationScope InstScope(*this);
@@ -5411,9 +5424,9 @@ bool Sema::DeduceReturnType(FunctionDecl *FD, SourceLocation Loc,
     FunctionDecl *CallOp = Lambda->getLambdaCallOperator();
 
     // For a generic lambda, instantiate the call operator if needed.
-    if (auto *Args = FD->getTemplateSpecializationArgs()) {
+    if (auto *Info = FD->getTemplateSpecializationInfo()) {
       CallOp = InstantiateFunctionDeclaration(
-          CallOp->getDescribedFunctionTemplate(), Args, Loc);
+          CallOp->getDescribedFunctionTemplate(), Info->TemplateArguments, Info->PackSize, Loc);
       if (!CallOp || CallOp->isInvalidDecl())
         return true;
 
@@ -5472,9 +5485,11 @@ bool Sema::CheckIfFunctionSpecializationIsImmediate(FunctionDecl *FD,
     FunctionDecl *CallOp = Lambda->getLambdaCallOperator();
 
     // For a generic lambda, instantiate the call operator if needed.
-    if (auto *Args = FD->getTemplateSpecializationArgs()) {
+    if (auto *SpecInfo = FD->getTemplateSpecializationInfo()) {
+      auto *Args = SpecInfo->TemplateArguments;
+      unsigned PackSize = SpecInfo->PackSize;
       CallOp = InstantiateFunctionDeclaration(
-          CallOp->getDescribedFunctionTemplate(), Args, Loc);
+          CallOp->getDescribedFunctionTemplate(), Args, PackSize, Loc);
       if (!CallOp || CallOp->isInvalidDecl())
         return true;
       runWithSufficientStackSpace(

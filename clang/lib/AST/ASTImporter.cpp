@@ -477,7 +477,7 @@ namespace clang {
 
     using TemplateArgsTy = SmallVector<TemplateArgument, 8>;
     using FunctionTemplateAndArgsTy =
-        std::tuple<FunctionTemplateDecl *, TemplateArgsTy>;
+        std::tuple<FunctionTemplateDecl *, TemplateArgsTy, unsigned>;
     Expected<FunctionTemplateAndArgsTy>
     ImportFunctionTemplateWithTemplateArgsFromSpecialization(
         FunctionDecl *FromFD);
@@ -804,6 +804,7 @@ ASTNodeImporter::ImportFunctionTemplateWithTemplateArgsFromSpecialization(
                                           std::get<1>(Result)))
     return std::move(Err);
 
+  std::get<2>(Result) = FTSInfo->PackSize;
   return Result;
 }
 
@@ -3676,7 +3677,8 @@ Error ASTNodeImporter::ImportTemplateInformation(
 
     TemplateSpecializationKind TSK = FTSInfo->getTemplateSpecializationKind();
     ToFD->setFunctionTemplateSpecialization(
-        std::get<0>(*FunctionAndArgsOrErr), ToTAList, /* InsertPos= */ nullptr,
+        std::get<0>(*FunctionAndArgsOrErr), ToTAList,
+        std::get<2>(*FunctionAndArgsOrErr), /* InsertPos= */ nullptr,
         TSK, FromTAArgsAsWritten ? &ToTAInfo : nullptr, *POIOrErr);
     return Error::success();
   }
@@ -3717,9 +3719,11 @@ ASTNodeImporter::FindFunctionTemplateSpecialization(FunctionDecl *FromFD) {
 
   FunctionTemplateDecl *Template;
   TemplateArgsTy ToTemplArgs;
-  std::tie(Template, ToTemplArgs) = *FunctionAndArgsOrErr;
+  unsigned PackSize;
+  std::tie(Template, ToTemplArgs, PackSize) = *FunctionAndArgsOrErr;
   void *InsertPos = nullptr;
-  auto *FoundSpec = Template->findSpecialization(ToTemplArgs, InsertPos);
+  auto *FoundSpec = Template->findSpecialization(ToTemplArgs, PackSize,
+                                                 InsertPos);
   return FoundSpec;
 }
 
