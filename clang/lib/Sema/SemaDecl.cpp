@@ -5806,9 +5806,10 @@ Sema::GetNameFromUnqualifiedId(const UnqualifiedId &Name) {
     //        template<typename T> using Y = X<T>;
     //        Y(int) -> Y<int>;
     //   satisfies these rules but does not name a class template.
+    // P2998 relaxes these rules to allow deduction guides for alias templates.
     TemplateName TN = Name.TemplateName.get().get();
     auto *Template = TN.getAsTemplateDecl();
-    if (!Template || !isa<ClassTemplateDecl>(Template)) {
+    if (!Template || (!isa<ClassTemplateDecl>(Template) && !isa<TypeAliasTemplateDecl>(Template))) {
       Diag(Name.StartLocation,
            diag::err_deduction_guide_name_not_class_template)
         << (int)getTemplateNameKindForDiagnostics(TN) << TN;
