@@ -1416,6 +1416,19 @@ static bool IsStructurallyEquivalent(StructuralEquivalenceContext &Context,
       return false;
     break;
   }
+  case Type::MultiReturn: {
+    const auto *Multi1 = cast<MultiReturnType>(T1);
+    const auto *Multi2 = cast<MultiReturnType>(T2);
+
+    if (Multi1->getNumTypes() != Multi2->getNumTypes())
+      return false;
+    for (unsigned I = 0, N = Multi1->getNumTypes(); I != N; ++I) {
+      if (!IsStructurallyEquivalent(Context, Multi1->getType(I),
+                                    Multi2->getType(I)))
+        return false;
+    }
+    break;
+  }
   } // end switch
 
   return true;

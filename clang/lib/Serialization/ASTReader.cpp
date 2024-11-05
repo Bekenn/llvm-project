@@ -7282,6 +7282,11 @@ void TypeLocReader::VisitDependentBitIntTypeLoc(
   TL.setNameLoc(readSourceLocation());
 }
 
+void TypeLocReader::VisitMultiReturnTypeLoc(clang::MultiReturnTypeLoc TL) {
+  for (TypeSourceInfo *Inner : TL.getTypeInfos())
+    Visit(Inner->getTypeLoc());
+}
+
 void ASTRecordReader::readTypeLoc(TypeLoc TL, LocSeq *ParentSeq) {
   LocSeq::State Seq(ParentSeq);
   TypeLocReader TLR(*this, Seq);

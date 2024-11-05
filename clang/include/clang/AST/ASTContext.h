@@ -25,6 +25,7 @@
 #include "clang/AST/RawCommentList.h"
 #include "clang/AST/SYCLKernelInfo.h"
 #include "clang/AST/TemplateName.h"
+#include "clang/AST/Type.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceLocation.h"
@@ -215,7 +216,8 @@ class ASTContext : public RefCountedBase<ASTContext> {
       DependentSizedMatrixTypes;
   mutable llvm::FoldingSet<FunctionNoProtoType> FunctionNoProtoTypes;
   mutable llvm::ContextualFoldingSet<FunctionProtoType, ASTContext&>
-    FunctionProtoTypes;
+      FunctionProtoTypes;
+  mutable llvm::FoldingSet<MultiReturnType> MultiReturnTypes;
   mutable llvm::ContextualFoldingSet<DependentTypeOfExprType, ASTContext &>
       DependentTypeOfExprTypes;
   mutable llvm::ContextualFoldingSet<DependentDecltypeType, ASTContext &>
@@ -1682,6 +1684,8 @@ public:
                            const FunctionProtoType::ExtProtoInfo &EPI) const {
     return getFunctionTypeInternal(ResultTy, Args, EPI, false);
   }
+
+  QualType getMultiReturnType(ArrayRef<QualType> Types) const;
 
   QualType adjustStringLiteralBaseType(QualType StrLTy) const;
 

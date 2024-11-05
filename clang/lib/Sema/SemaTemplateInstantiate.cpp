@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===/
 
 #include "TreeTransform.h"
+#include "TypeLocBuilder.h"
 #include "clang/AST/ASTConcept.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
@@ -1623,12 +1624,13 @@ namespace {
       return inherited::TransformTemplateArgument(Input, Output, Uneval);
     }
 
-    template<typename Fn>
+    template<typename Fn1, typename Fn2>
     QualType TransformFunctionProtoType(TypeLocBuilder &TLB,
                                         FunctionProtoTypeLoc TL,
                                         CXXRecordDecl *ThisContext,
                                         Qualifiers ThisTypeQuals,
-                                        Fn TransformExceptionSpec);
+                                        Fn1 TransformReturnType,
+                                        Fn2 TransformExceptionSpec);
 
     ParmVarDecl *
     TransformFunctionTypeParam(ParmVarDecl *OldParm, int indexAdjustment,
@@ -2497,12 +2499,13 @@ ExprResult TemplateInstantiator::TransformCXXDefaultArgExpr(
       E->getParam());
 }
 
-template<typename Fn>
+template<typename Fn1, typename Fn2>
 QualType TemplateInstantiator::TransformFunctionProtoType(TypeLocBuilder &TLB,
                                  FunctionProtoTypeLoc TL,
                                  CXXRecordDecl *ThisContext,
                                  Qualifiers ThisTypeQuals,
-                                 Fn TransformExceptionSpec) {
+                                 Fn1 TransformReturnType,
+                                 Fn2 TransformExceptionSpec) {
   // If this is a lambda or block, the transformation MUST be done in the
   // CurrentInstantiationScope since it introduces a mapping of
   // the original to the newly created transformed parameters.
@@ -2516,7 +2519,8 @@ QualType TemplateInstantiator::TransformFunctionProtoType(TypeLocBuilder &TLB,
     Scope.emplace(SemaRef, /*CombineWithOuterScope=*/true);
 
   return inherited::TransformFunctionProtoType(
-      TLB, TL, ThisContext, ThisTypeQuals, TransformExceptionSpec);
+      TLB, TL, ThisContext, ThisTypeQuals, TransformReturnType,
+      TransformExceptionSpec);
 }
 
 ParmVarDecl *TemplateInstantiator::TransformFunctionTypeParam(
@@ -3022,6 +3026,8 @@ TypeSourceInfo *Sema::SubstFunctionDeclType(TypeSourceInfo *T,
     // instead of rebuilding the function type again later.
     Result = Instantiator.TransformFunctionProtoType(
         TLB, Proto, ThisContext, ThisTypeQuals,
+        [&](TypeLocBuilder &TLB, TypeLoc TL) {
+          return Instantiator.TransformType(TLB, TL); },
         [](FunctionProtoType::ExceptionSpecInfo &ESI,
            bool &Changed) { return false; });
   } else {

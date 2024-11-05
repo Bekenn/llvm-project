@@ -4639,6 +4639,14 @@ static CachedProperties computeCachedProperties(const Type *T) {
     return Cache::get(cast<PipeType>(T)->getElementType());
   case Type::HLSLAttributedResource:
     return Cache::get(cast<HLSLAttributedResourceType>(T)->getWrappedType());
+  case Type::MultiReturn: {
+    const MultiReturnType *MRT = cast<MultiReturnType>(T);
+    assert(MRT->getNumTypes() != 0 && "MultiReturnType with no types?");
+    CachedProperties Props = Cache::get(MRT->getType(0));
+    for (unsigned I = 1, N = MRT->getNumTypes(); I != N; ++I)
+      Props = merge(Props, Cache::get(MRT->getType(I)));
+    return Props;
+  }
   }
 
   llvm_unreachable("unhandled type class");
@@ -4732,6 +4740,14 @@ LinkageInfo LinkageComputer::computeTypeLinkageInfo(const Type *T) {
     return computeTypeLinkageInfo(cast<HLSLAttributedResourceType>(T)
                                       ->getContainedType()
                                       ->getCanonicalTypeInternal());
+  case Type::MultiReturn: {
+    const auto *MRT = cast<MultiReturnType>(T);
+    assert(MRT->getNumTypes() != 0 && "MultiReturnType with no types?");
+    LinkageInfo LV = computeTypeLinkageInfo(MRT->getType(0));
+    for (unsigned I = 1, N = MRT->getNumTypes(); I != N; ++I)
+      LV.merge(computeTypeLinkageInfo(MRT->getType(I)));
+    return LV;
+  }
   }
 
   llvm_unreachable("unhandled type class");
@@ -4922,6 +4938,7 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
   case Type::DependentBitInt:
   case Type::ArrayParameter:
   case Type::HLSLAttributedResource:
+  case Type::MultiReturn:
     return false;
   }
   llvm_unreachable("bad type kind!");
@@ -5204,6 +5221,29 @@ void AutoType::Profile(llvm::FoldingSetNodeID &ID, const ASTContext &Context,
 void AutoType::Profile(llvm::FoldingSetNodeID &ID, const ASTContext &Context) {
   Profile(ID, Context, getDeducedType(), getKeyword(), isDependentType(),
           getTypeConstraintConcept(), getTypeConstraintArguments());
+}
+
+TypeDependence MultiReturnType::unionDependence(ArrayRef<QualType> Types) {
+  TypeDependence TD = TypeDependence::None;
+  for (QualType Type : Types)
+    TD |= Type->getDependence();
+  return TD;
+}
+
+MultiReturnType::MultiReturnType(ArrayRef<QualType> Types, QualType Canon)
+    : Type(MultiReturn, Canon, unionDependence(Types)) {
+  MultiReturnTypeBits.NumTypes = Types.size();
+  std::copy(Types.begin(), Types.end(), getTrailingObjects<QualType>());
+}
+
+void MultiReturnType::Profile(llvm::FoldingSetNodeID &ID) {
+  for (QualType Type : getTypes())
+    Type.Profile(ID);
+}
+
+void MultiReturnType::Profile(llvm::FoldingSetNodeID &ID, ArrayRef<QualType> Types) {
+  for (QualType Type : Types)
+    Type.Profile(ID);
 }
 
 FunctionEffect::Kind FunctionEffect::oppositeKind() const {

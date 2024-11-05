@@ -752,6 +752,8 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
   case Type::HLSLAttributedResource:
     ResultType = CGM.getHLSLRuntime().convertHLSLSpecificType(Ty);
     break;
+  case Type::MultiReturn:
+    llvm_unreachable("Unexpected multiple return types");
   }
 
   assert(ResultType && "Didn't convert a type?");

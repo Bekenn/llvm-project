@@ -2265,6 +2265,15 @@ protected:
   };
   static_assert(sizeof(CountAttributedTypeBitfields) <= sizeof(unsigned));
 
+  class MultiReturnTypeBitfields {
+    friend class MultiReturnType;
+
+    LLVM_PREFERRED_TYPE(TypeBitfields)
+    unsigned : NumTypeBits;
+
+    unsigned NumTypes;
+  };
+
   union {
     TypeBitfields TypeBits;
     ArrayTypeBitfields ArrayTypeBits;
@@ -2289,6 +2298,7 @@ protected:
       DependentTemplateSpecializationTypeBits;
     PackExpansionTypeBitfields PackExpansionTypeBits;
     CountAttributedTypeBitfields CountAttributedTypeBits;
+    MultiReturnTypeBitfields MultiReturnTypeBits;
   };
 
 private:
@@ -7865,6 +7875,53 @@ public:
   static bool classof(const Type *T) {
     return T->getTypeClass() == DependentBitInt;
   }
+};
+
+class MultiReturnType final : public Type, public llvm::FoldingSetNode,
+    private llvm::TrailingObjects<MultiReturnType, QualType> {
+  friend class ASTContext;
+  friend TrailingObjects;
+
+  static TypeDependence unionDependence(ArrayRef<QualType> Types);
+
+  MultiReturnType(ArrayRef<QualType> Types, QualType Canon);
+  size_t numTrailingObjects(OverloadToken<QualType>) const {
+    return MultiReturnTypeBits.NumTypes;
+  }
+
+public:
+  unsigned getNumTypes() const { return MultiReturnTypeBits.NumTypes; }
+
+  QualType getType(unsigned i) const {
+    assert(i < getNumTypes() && "invalid type index");
+    return type_begin()[i];
+  }
+
+  ArrayRef<QualType> getTypes() const {
+    return llvm::ArrayRef(type_begin(), type_end());
+  }
+
+  using type_iterator = const QualType *;
+
+  ArrayRef<QualType> types() const {
+    return llvm::ArrayRef(type_begin(), type_end());
+  }
+
+  type_iterator type_begin() const {
+    return getTrailingObjects<QualType>();
+  }
+
+  type_iterator type_end() const {
+    return type_begin() + getNumTypes();
+  }
+
+  bool isSugared() const { return false; }
+  QualType desugar() const { return QualType(this, 0); }
+
+  void Profile(llvm::FoldingSetNodeID &ID);
+  static void Profile(llvm::FoldingSetNodeID &ID, ArrayRef<QualType> Types);
+
+  static bool classof(const Type *T) { return T->getTypeClass() == MultiReturn; }
 };
 
 /// A qualifier set is used to build a set of qualifiers.

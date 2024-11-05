@@ -32,6 +32,7 @@
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/OperationKinds.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticCategories.h"
 #include "clang/Basic/DiagnosticIDs.h"
@@ -1921,6 +1922,14 @@ bool CursorVisitor::VisitAtomicTypeLoc(AtomicTypeLoc TL) {
 
 bool CursorVisitor::VisitPipeTypeLoc(PipeTypeLoc TL) {
   return Visit(TL.getValueLoc());
+}
+
+bool CursorVisitor::VisitMultiReturnTypeLoc(MultiReturnTypeLoc TL) {
+  for (TypeSourceInfo *TSI : TL.getTypeInfos())
+    if (Visit(TSI->getTypeLoc()))
+      return true;
+
+  return false;
 }
 
 #define DEFAULT_TYPELOC_IMPL(CLASS, PARENT)                                    \

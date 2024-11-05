@@ -1924,6 +1924,18 @@ ExpectedType clang::ASTNodeImporter::VisitPipeType(const clang::PipeType *T) {
     return ToCtx.getWritePipeType(*ToElementTypeOrErr);
 }
 
+ExpectedType ASTNodeImporter::VisitMultiReturnType(const MultiReturnType *T) {
+  SmallVector<QualType> Types;
+  for (const auto &Type : T->types()) {
+    ExpectedType TyOrErr = import(Type);
+    if (!TyOrErr)
+      return TyOrErr.takeError();
+    Types.push_back(*TyOrErr);
+  }
+
+  return Importer.getToContext().getMultiReturnType(Types);
+}
+
 //----------------------------------------------------------------------------
 // Import Declarations
 //----------------------------------------------------------------------------

@@ -3217,6 +3217,11 @@ addAssociatedClassesAndNamespaces(AssociatedLookup &Result, QualType Ty) {
 
     case Type::HLSLAttributedResource:
       T = cast<HLSLAttributedResourceType>(T)->getWrappedType().getTypePtr();
+      break;
+
+    // Multiple return types can't appear in this context.
+    case Type::MultiReturn:
+      break;
     }
 
     if (Queue.empty())

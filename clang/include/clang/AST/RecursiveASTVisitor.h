@@ -1198,6 +1198,12 @@ DEF_TRAVERSE_TYPE(BitIntType, {})
 DEF_TRAVERSE_TYPE(DependentBitIntType,
                   { TRY_TO(TraverseStmt(T->getNumBitsExpr())); })
 
+DEF_TRAVERSE_TYPE(MultiReturnType, {
+  for (const auto &A : T->types()) {
+    TRY_TO(TraverseType(A));
+  }
+})
+
 #undef DEF_TRAVERSE_TYPE
 
 // ----------------- TypeLoc traversal -----------------
@@ -1509,6 +1515,12 @@ DEF_TRAVERSE_TYPELOC(PipeType, { TRY_TO(TraverseTypeLoc(TL.getValueLoc())); })
 DEF_TRAVERSE_TYPELOC(BitIntType, {})
 DEF_TRAVERSE_TYPELOC(DependentBitIntType, {
   TRY_TO(TraverseStmt(TL.getTypePtr()->getNumBitsExpr()));
+})
+
+DEF_TRAVERSE_TYPELOC(MultiReturnType, {
+  for (unsigned I = 0, E = TL.getNumTypes(); I != E; ++I) {
+    TRY_TO(TraverseTypeLoc(TL.getTInfo(I)->getTypeLoc()));
+  }
 })
 
 #undef DEF_TRAVERSE_TYPELOC

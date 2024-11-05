@@ -3766,6 +3766,11 @@ void MicrosoftCXXNameMangler::mangleType(const HLSLAttributedResourceType *T,
   llvm_unreachable("HLSL uses Itanium name mangling");
 }
 
+void MicrosoftCXXNameMangler::mangleType(const MultiReturnType * T,
+                                         Qualifiers, SourceRange Range) {
+  llvm_unreachable("shouldn't need to mangle MultiReturnType!");
+}
+
 // <this-adjustment> ::= <no-adjustment> | <static-adjustment> |
 //                       <virtual-adjustment>
 // <no-adjustment>      ::= A # private near

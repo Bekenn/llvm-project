@@ -15,6 +15,7 @@
 
 #include "CoroutineStmtBuilder.h"
 #include "TypeLocBuilder.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
@@ -29,6 +30,7 @@
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtOpenACC.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/AST/Type.h"
 #include "clang/Basic/DiagnosticParse.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Sema/Designator.h"
@@ -677,12 +679,13 @@ public:
                                          SubstTemplateTypeParmPackTypeLoc TL,
                                          bool SuppressObjCLifetime);
 
-  template<typename Fn>
+  template<typename Fn1, typename Fn2>
   QualType TransformFunctionProtoType(TypeLocBuilder &TLB,
                                       FunctionProtoTypeLoc TL,
                                       CXXRecordDecl *ThisContext,
                                       Qualifiers ThisTypeQuals,
-                                      Fn TransformExceptionSpec);
+                                      Fn1 TransformReturnType,
+                                      Fn2 TransformExceptionSpec);
 
   bool TransformExceptionSpec(SourceLocation Loc,
                               FunctionProtoType::ExceptionSpecInfo &ESI,
@@ -6323,16 +6326,20 @@ TreeTransform<Derived>::TransformFunctionProtoType(TypeLocBuilder &TLB,
   SmallVector<QualType, 4> ExceptionStorage;
   return getDerived().TransformFunctionProtoType(
       TLB, TL, nullptr, Qualifiers(),
+      [&](TypeLocBuilder &TLB, TypeLoc TL) {
+        return getDerived().TransformType(TLB, TL);
+      },
       [&](FunctionProtoType::ExceptionSpecInfo &ESI, bool &Changed) {
         return getDerived().TransformExceptionSpec(TL.getBeginLoc(), ESI,
                                                    ExceptionStorage, Changed);
       });
 }
 
-template<typename Derived> template<typename Fn>
+template<typename Derived> template<typename Fn1, typename Fn2>
 QualType TreeTransform<Derived>::TransformFunctionProtoType(
     TypeLocBuilder &TLB, FunctionProtoTypeLoc TL, CXXRecordDecl *ThisContext,
-    Qualifiers ThisTypeQuals, Fn TransformExceptionSpec) {
+    Qualifiers ThisTypeQuals, Fn1 TransformReturnType,
+    Fn2 TransformExceptionSpec) {
 
   // Transform the parameters and return type.
   //
@@ -6367,13 +6374,13 @@ QualType TreeTransform<Derived>::TransformFunctionProtoType(
       Sema::CXXThisScopeRAII ThisScope(
           SemaRef, !ThisContext && RD ? RD : ThisContext, ThisTypeQuals);
 
-      ResultType = getDerived().TransformType(TLB, TL.getReturnLoc());
+      ResultType = TransformReturnType(TLB, TL.getReturnLoc());
       if (ResultType.isNull())
         return QualType();
     }
   }
   else {
-    ResultType = getDerived().TransformType(TLB, TL.getReturnLoc());
+    ResultType = TransformReturnType(TLB, TL.getReturnLoc());
     if (ResultType.isNull())
       return QualType();
 
@@ -7974,6 +7981,42 @@ TreeTransform<Derived>::TransformObjCObjectPointerType(TypeLocBuilder &TLB,
 
   ObjCObjectPointerTypeLoc NewT = TLB.push<ObjCObjectPointerTypeLoc>(Result);
   NewT.setStarLoc(TL.getStarLoc());
+  return Result;
+}
+
+template<typename Derived>
+QualType TreeTransform<Derived>::TransformMultiReturnType(TypeLocBuilder &TLB,
+                                                      MultiReturnTypeLoc TL) {
+  unsigned NumTypes = TL.getNumTypes();
+  SmallVector<QualType> Transformed;
+  SmallVector<TypeSourceInfo *> TransformedTSIs;
+  Transformed.reserve(NumTypes);
+  TransformedTSIs.reserve(NumTypes);
+  bool Rebuild = getDerived().AlwaysRebuild();
+
+  for (TypeSourceInfo *TSI : TL.getTypeInfos()) {
+    TypeSourceInfo *TransformedTSI = getDerived().TransformType(TSI);
+    if (TransformedTSI == nullptr) {
+      Rebuild = true;
+      continue;
+    }
+
+    Transformed.push_back(TransformedTSI->getType());
+    TransformedTSIs.push_back(TransformedTSI);
+    Rebuild |= Transformed.back() != TSI->getType();
+  }
+
+  if (Transformed.empty())
+    return QualType();
+
+  if (!Rebuild)
+    return TL.getType();
+
+  QualType Result = SemaRef.Context.getMultiReturnType(Transformed);
+  MultiReturnTypeLoc NewTL = TLB.push<MultiReturnTypeLoc>(Result);
+  for (unsigned i = 0, e = NewTL.getNumTypes(); i != e; ++i)
+    NewTL.setTInfo(i, TransformedTSIs[i]);
+
   return Result;
 }
 

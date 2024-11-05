@@ -24,6 +24,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtVisitor.h"
+#include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/AttributeCommonInfo.h"
@@ -50,6 +51,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include <map>
@@ -11458,38 +11460,48 @@ bool Sema::CheckDeductionGuideDeclarator(Declarator &D, QualType &R,
     TypeSourceInfo *TSI = nullptr;
     QualType RetTy = GetTypeFromParser(TrailingReturnType, &TSI);
     assert(TSI && "deduction guide has valid type but invalid return type?");
-    bool AcceptableReturnType = false;
-    bool MightInstantiateToSpecialization = false;
-    if (auto RetTST =
-            TSI->getTypeLoc().getAsAdjusted<TemplateSpecializationTypeLoc>()) {
-      TemplateName SpecifiedName = RetTST.getTypePtr()->getTemplateName();
-      bool TemplateMatches = Context.hasSameTemplateName(
-          SpecifiedName, GuidedTemplate, /*IgnoreDeduced=*/true);
 
-      const QualifiedTemplateName *Qualifiers =
-          SpecifiedName.getAsQualifiedTemplateName();
-      assert(Qualifiers && "expected QualifiedTemplate");
-      bool SimplyWritten = !Qualifiers->hasTemplateKeyword() &&
-                           Qualifiers->getQualifier() == nullptr;
-      if (SimplyWritten && TemplateMatches)
-        AcceptableReturnType = true;
-      else {
-        // This could still instantiate to the right type, unless we know it
-        // names the wrong class template.
-        auto *TD = SpecifiedName.getAsTemplateDecl();
-        MightInstantiateToSpecialization =
-            !(TD && isa<ClassTemplateDecl>(TD) && !TemplateMatches);
-      }
-    } else if (!RetTy.hasQualifiers() && RetTy->isDependentType()) {
-      MightInstantiateToSpecialization = true;
+    ArrayRef<TypeSourceInfo *> TSIs(TSI);
+    if (auto *MRT = RetTy->getAs<MultiReturnType>()) {
+      auto MRTL = TSI->getTypeLoc().castAs<MultiReturnTypeLoc>();
+      TSIs = MRTL.getTypeInfos();
     }
 
-    if (!AcceptableReturnType)
-      return Diag(TSI->getTypeLoc().getBeginLoc(),
-                  diag::err_deduction_guide_bad_trailing_return_type)
-             << GuidedTemplate << TSI->getType()
-             << MightInstantiateToSpecialization
-             << TSI->getTypeLoc().getSourceRange();
+    for (TypeSourceInfo *TSI : TSIs) {
+      RetTy = TSI->getType();
+      bool AcceptableReturnType = false;
+      bool MightInstantiateToSpecialization = false;
+      if (auto RetTST =
+              TSI->getTypeLoc().getAsAdjusted<TemplateSpecializationTypeLoc>()) {
+        TemplateName SpecifiedName = RetTST.getTypePtr()->getTemplateName();
+        bool TemplateMatches = Context.hasSameTemplateName(
+            SpecifiedName, GuidedTemplate, /*IgnoreDeduced=*/true);
+
+        const QualifiedTemplateName *Qualifiers =
+            SpecifiedName.getAsQualifiedTemplateName();
+        assert(Qualifiers && "expected QualifiedTemplate");
+        bool SimplyWritten = !Qualifiers->hasTemplateKeyword() &&
+                             Qualifiers->getQualifier() == nullptr;
+        if (SimplyWritten && TemplateMatches)
+          AcceptableReturnType = true;
+        else {
+          // This could still instantiate to the right type, unless we know it
+          // names the wrong class template.
+          auto *TD = SpecifiedName.getAsTemplateDecl();
+          MightInstantiateToSpecialization =
+              !TD || !isa<ClassTemplateDecl>(TD) || TemplateMatches;
+        }
+      } else if (!RetTy.hasQualifiers() && RetTy->isDependentType()) {
+        MightInstantiateToSpecialization = true;
+      }
+
+      if (!AcceptableReturnType)
+        return Diag(TSI->getTypeLoc().getBeginLoc(),
+                    diag::err_deduction_guide_bad_trailing_return_type)
+              << GuidedTemplate << TSI->getType()
+              << MightInstantiateToSpecialization
+              << TSI->getTypeLoc().getSourceRange();
+    }
 
     // Keep going to check that we don't have any inner declarator pieces (we
     // could still have a function returning a pointer to a function).

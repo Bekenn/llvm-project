@@ -11890,6 +11890,20 @@ public:
                                           Kind, TemplateArgLoc);
   }
 
+  bool MatchTemplateParameterKind(
+      const Sema::TemplateCompareNewDeclInfo &NewInstFrom, const NamedDecl *New,
+      const NamedDecl *OldInstFrom, const NamedDecl *Old, bool Complain,
+      TemplateParameterListEqualKind Kind,
+      SourceLocation TemplateArgLoc = SourceLocation());
+
+  bool MatchTemplateParameterKind(
+      const NamedDecl *New, const NamedDecl *Old, bool Complain,
+      TemplateParameterListEqualKind Kind,
+      SourceLocation TemplateArgLoc = SourceLocation()) {
+    return MatchTemplateParameterKind(nullptr, New, nullptr, Old, Complain,
+                                      Kind, TemplateArgLoc);
+  }
+
   /// Check whether a template can be declared within this scope.
   ///
   /// If the template declaration is valid in this scope, returns
@@ -14776,6 +14790,7 @@ public:
                                     TypeSourceInfo **TInfo = nullptr);
 
   TypeResult ActOnTypeName(Declarator &D);
+  TypeResult ActOnMultiReturnType(ArrayRef<ParsedType> Types);
 
   // Check whether the size of array element of type \p EltTy is a multiple of
   // its alignment and return false if it isn't.

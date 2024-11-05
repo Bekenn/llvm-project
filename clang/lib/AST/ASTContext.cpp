@@ -2494,6 +2494,10 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
     Width = Target->getPointerWidth(LangAS::opencl_global);
     Align = Target->getPointerAlign(LangAS::opencl_global);
     break;
+
+  case Type::MultiReturn:
+    llvm_unreachable("MultiReturn type is not instantiable");
+    break;
   }
 
   assert(llvm::isPowerOf2_32(Align) && "Alignment must be power of 2");
@@ -3486,6 +3490,10 @@ static void encodeTypeForFunctionPointerAuth(const ASTContext &Ctx,
 #include "clang/AST/TypeNodes.inc"
     llvm_unreachable("unexpected non-canonical or dependent type!");
     return;
+
+  case Type::MultiReturn:
+    llvm_unreachable("should never get here");
+    break;
   }
 }
 
@@ -4149,6 +4157,7 @@ QualType ASTContext::getVariableArrayDecayedType(QualType type) const {
   case Type::DependentBitInt:
   case Type::ArrayParameter:
   case Type::HLSLAttributedResource:
+  case Type::MultiReturn:
     llvm_unreachable("type should never be variably-modified");
 
   // These types can be variably-modified but should never need to
@@ -4841,6 +4850,38 @@ static bool isCanonicalExceptionSpecification(
   }
 
   return false;
+}
+
+QualType ASTContext::getMultiReturnType(ArrayRef<QualType> Types) const {
+  llvm::FoldingSetNodeID ID;
+  MultiReturnType::Profile(ID, Types);
+  void *InsertPos = nullptr;
+  if (MultiReturnType *MRT = MultiReturnTypes.FindNodeOrInsertPos(ID, InsertPos))
+    return QualType(MRT, 0);
+
+  SmallVector<QualType> CanTypes;
+  CanTypes.reserve(Types.size());
+  for (QualType T : Types)
+    CanTypes.push_back(getCanonicalFunctionResultType(T));
+
+  size_t Size = MultiReturnType::totalSizeToAlloc<QualType>(Types.size());
+
+  llvm::FoldingSetNodeID CanID;
+  MultiReturnType::Profile(CanID, CanTypes);
+  void *CanInsertPos = nullptr;
+  MultiReturnType *CanMRT = MultiReturnTypes.FindNodeOrInsertPos(CanID, CanInsertPos);
+  if (!CanMRT) {
+    CanMRT = new (Allocate(Size, alignof(MultiReturnType))) MultiReturnType(CanTypes, {});
+    this->Types.push_back(CanMRT);
+    MultiReturnTypes.InsertNode(CanMRT, CanInsertPos);
+    if (MultiReturnType *MRT = MultiReturnTypes.FindNodeOrInsertPos(ID, InsertPos))
+      return QualType(MRT, 0);
+  }
+
+  MultiReturnType *MRT = new (Allocate(Size, alignof(MultiReturnType))) MultiReturnType(Types, QualType(CanMRT, 0));
+  this->Types.push_back(MRT);
+  MultiReturnTypes.InsertNode(MRT, InsertPos);
+  return QualType(MRT, 0);
 }
 
 QualType ASTContext::getFunctionTypeInternal(
@@ -9177,6 +9218,7 @@ void ASTContext::getObjCEncodingForTypeImpl(QualType T, std::string &S,
     return;
 
   case Type::HLSLAttributedResource:
+  case Type::MultiReturn:
     llvm_unreachable("unexpected type");
 
   case Type::ArrayParameter:
@@ -11421,6 +11463,7 @@ QualType ASTContext::mergeTypes(QualType LHS, QualType RHS, bool OfBlockPointer,
   case Type::LValueReference:
   case Type::RValueReference:
   case Type::MemberPointer:
+  case Type::MultiReturn:
     llvm_unreachable("C++ should never be in mergeTypes");
 
   case Type::ObjCInterface:
@@ -13799,6 +13842,12 @@ static QualType getCommonNonSugarTypeNode(ASTContext &Ctx, const Type *X,
         TX->getDepth(), TX->getIndex(), TX->isParameterPack(),
         getCommonDecl(TX->getDecl(), TY->getDecl()));
   }
+  case Type::MultiReturn: {
+    const auto *MRX = cast<MultiReturnType>(X), *MRY = cast<MultiReturnType>(Y);
+    assert(MRX->getNumTypes() == MRY->getNumTypes());
+    auto Types = getCommonTypes(Ctx, MRX->getTypes(), MRY->getTypes());
+    return Ctx.getMultiReturnType(Types);
+  }
   }
   llvm_unreachable("Unknown Type Class");
 }
@@ -13834,6 +13883,7 @@ static QualType getCommonSugarTypeNode(ASTContext &Ctx, const Type *X,
     CANONICAL_TYPE(HLSLAttributedResource)
     CANONICAL_TYPE(LValueReference)
     CANONICAL_TYPE(MemberPointer)
+    CANONICAL_TYPE(MultiReturn)
     CANONICAL_TYPE(ObjCInterface)
     CANONICAL_TYPE(ObjCObject)
     CANONICAL_TYPE(ObjCObjectPointer)

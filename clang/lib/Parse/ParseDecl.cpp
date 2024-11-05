@@ -7703,7 +7703,9 @@ void Parser::ParseFunctionDeclarator(Declarator &D,
         LocalEndLoc = Tok.getLocation();
         SourceRange Range;
         TrailingReturnType =
-            ParseTrailingReturnType(Range, D.mayBeFollowedByCXXDirectInit());
+          D.getName().getKind() == UnqualifiedIdKind::IK_DeductionGuideName
+            ? ParseTrailingReturnTypes(Range, D.mayBeFollowedByCXXDirectInit())
+            : ParseTrailingReturnType(Range, D.mayBeFollowedByCXXDirectInit());
         TrailingReturnTypeLoc = Range.getBegin();
         EndLoc = Range.getEnd();
       }

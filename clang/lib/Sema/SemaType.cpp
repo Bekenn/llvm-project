@@ -44,6 +44,7 @@
 #include "clang/Sema/TemplateInstCallback.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLForwardCompat.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -6441,6 +6442,27 @@ TypeResult Sema::ActOnTypeName(Declarator &D) {
     CheckConstrainedAuto(AT, TL.getConceptNameLoc());
   }
   return CreateParsedType(T, TInfo);
+}
+
+TypeResult Sema::ActOnMultiReturnType(ArrayRef<ParsedType> Types) {
+  SmallVector<QualType> QTs;
+  SmallVector<TypeSourceInfo *> TSIs;
+  QTs.reserve(Types.size());
+  TSIs.reserve(Types.size());
+  size_t N = 0;
+  for (ParsedType Type : Types) {
+    TSIs.resize_for_overwrite(N + 1);
+    QTs.push_back(GetTypeFromParser(Type, &TSIs.back()));
+    ++N;
+  }
+
+  QualType MRT = Context.getMultiReturnType(QTs);
+  TypeSourceInfo *TSI = Context.CreateTypeSourceInfo(MRT);
+  auto TL = TSI->getTypeLoc().castAs<MultiReturnTypeLoc>();
+  for (size_t i = 0; i != N; ++i)
+    TL.setTInfo(i, TSIs[i]);
+
+  return CreateParsedType(MRT, TSI);
 }
 
 //===----------------------------------------------------------------------===//

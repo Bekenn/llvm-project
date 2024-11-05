@@ -47,6 +47,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SHA1.h"
@@ -3834,6 +3835,9 @@ llvm::DIType *CGDebugInfo::CreateTypeNode(QualType Ty, llvm::DIFile *Unit) {
 
   case Type::TemplateSpecialization:
     return CreateType(cast<TemplateSpecializationType>(Ty), Unit);
+
+  case Type::MultiReturn:
+    llvm_unreachable("Multiple return types cannot show up in debug information");
 
   case Type::CountAttributed:
   case Type::Auto:
