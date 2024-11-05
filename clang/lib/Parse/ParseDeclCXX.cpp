@@ -4428,6 +4428,37 @@ TypeResult Parser::ParseTrailingReturnType(SourceRange &Range,
                                    : DeclaratorContext::TrailingReturn);
 }
 
+TypeResult Parser::ParseTrailingReturnTypes(SourceRange &Range,
+                                            bool MayBeFollowedByDirectInit) {
+  assert(Tok.is(tok::arrow) && "expected arrow");
+
+  ConsumeToken();
+
+  SmallVector<ParsedType> Types;
+  SmallVector<SourceRange> Ranges;
+
+  DeclaratorContext Context = MayBeFollowedByDirectInit
+                            ? DeclaratorContext::TrailingReturnVar
+                            : DeclaratorContext::TrailingReturn;
+  bool Invalid = false;
+  size_t N = 0;
+  do {
+    Ranges.resize_for_overwrite(N + 1);
+    TypeResult T = ParseTypeName(&Ranges[N], Context);
+    Invalid = T.isInvalid();
+    Types.push_back(T.get());
+    ++N;
+  } while (!Invalid && TryConsumeToken(tok::comma));
+
+  Range = { Ranges.front().getBegin(), Ranges.back().getEnd() };
+  if (Invalid)
+    return true;
+  if (N == 1)
+    return Types[0];
+
+  return Actions.ActOnMultiReturnType(Types);
+}
+
 /// Parse a requires-clause as part of a function declaration.
 void Parser::ParseTrailingRequiresClause(Declarator &D) {
   assert(Tok.is(tok::kw_requires) && "expected requires");

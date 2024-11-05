@@ -288,6 +288,7 @@ bool TypePrinter::canPrefixQualifiers(const Type *T,
     case Type::SubstTemplateTypeParm:
     case Type::MacroQualified:
     case Type::CountAttributed:
+    case Type::MultiReturn:
       CanPrefixQualifiers = false;
       break;
 
@@ -1172,6 +1173,21 @@ void TypePrinter::printFunctionNoProtoAfter(const FunctionNoProtoType *T,
   printFunctionAfter(T->getExtInfo(), OS);
   printAfter(T->getReturnType(), OS);
 }
+
+void TypePrinter::printMultiReturnBefore(const MultiReturnType *T,
+                                         raw_ostream &OS) {
+  assert(T->getNumTypes() != 0 && "MultiReturnType with no types?");
+  OS << '(';
+  print(T->getType(0), OS, "");
+  for (unsigned I = 1, N = T->getNumTypes(); I != N; ++I) {
+    OS << " | ";
+    print(T->getType(I), OS, "");
+  }
+  OS << ')';
+}
+
+void TypePrinter::printMultiReturnAfter(const MultiReturnType *T,
+                                        raw_ostream &OS) {}
 
 void TypePrinter::printTypeSpec(NamedDecl *D, raw_ostream &OS) {
 

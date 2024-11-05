@@ -12253,6 +12253,9 @@ GCCTypeClass EvaluateBuiltinClassifyType(QualType T,
   case Type::LValueReference:
   case Type::RValueReference:
     llvm_unreachable("invalid type for expression");
+
+  case Type::MultiReturn:
+    llvm_unreachable("unexpected type class");
   }
 
   llvm_unreachable("unexpected type class");

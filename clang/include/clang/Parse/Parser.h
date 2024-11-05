@@ -2065,6 +2065,10 @@ private:
   TypeResult ParseTrailingReturnType(SourceRange &Range,
                                      bool MayBeFollowedByDirectInit);
 
+  // P2998: Multiple return types for deduction guides
+  TypeResult ParseTrailingReturnTypes(SourceRange &Range,
+                                      bool MayBeFollowedByDirectInit);
+
   //===--------------------------------------------------------------------===//
   // C++ 2.13.5: C++ Boolean Literals
   ExprResult ParseCXXBoolLiteral();

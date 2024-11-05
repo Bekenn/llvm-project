@@ -58,6 +58,7 @@
 #include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <cstring>
@@ -10702,6 +10703,19 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
                 *this, Previous, NewFD, ExtraArgs, true, S)) {
           AddToScope = ExtraArgs.AddToScope;
           return Result;
+        }
+      }
+
+      // A non-dependent deduction guide has no type constraints but can have
+      // multiple return types. In this case, select the first return type as
+      // its deduced type.
+      if (!R->isDependentType()) {
+        if (auto *Guide = dyn_cast<CXXDeductionGuideDecl>(NewFD)) {
+          QualType RT = Guide->getReturnType();
+          if (auto *MRT = RT->getAs<MultiReturnType>())
+            Guide->setDeducedType(MRT->getType(0));
+          else
+            Guide->setDeducedType(RT);
         }
       }
     } else if (!D.isFunctionDefinition() &&

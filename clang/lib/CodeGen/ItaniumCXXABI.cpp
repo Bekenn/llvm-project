@@ -34,6 +34,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ScopedPrinter.h"
 
 #include <optional>
@@ -3951,6 +3952,9 @@ void ItaniumRTTIBuilder::BuildVTablePointer(const Type *Ty,
 
   case Type::HLSLAttributedResource:
     llvm_unreachable("HLSL doesn't support virtual functions");
+
+  case Type::MultiReturn:
+    llvm_unreachable("Multiple return types should not get here");
   }
 
   llvm::Constant *VTable = nullptr;
@@ -4229,6 +4233,9 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(
 
   case Type::HLSLAttributedResource:
     llvm_unreachable("HLSL doesn't support RTTI");
+
+  case Type::MultiReturn:
+    llvm_unreachable("Multiple return types should not get here");
   }
 
   GV->replaceInitializer(llvm::ConstantStruct::getAnon(Fields));

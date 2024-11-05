@@ -2279,9 +2279,6 @@ Decl *TemplateDeclInstantiator::VisitFunctionDecl(
       Params[P]->setOwningFunction(Function);
   Function->setParams(Params);
 
-  if (TrailingRequiresClause)
-    Function->setTrailingRequiresClause(TrailingRequiresClause);
-
   if (TemplateParams) {
     // Our resulting instantiation is actually a function template, since we
     // are substituting only the outer template parameters. For example, given

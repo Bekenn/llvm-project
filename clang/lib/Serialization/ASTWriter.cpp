@@ -688,6 +688,12 @@ void TypeLocWriter::VisitDependentBitIntTypeLoc(
   addSourceLocation(TL.getNameLoc());
 }
 
+void TypeLocWriter::VisitMultiReturnTypeLoc(
+    clang::MultiReturnTypeLoc TL) {
+  for (TypeSourceInfo *Inner : TL.getTypeInfos())
+    Visit(Inner->getTypeLoc());
+}
+
 void ASTWriter::WriteTypeAbbrevs() {
   using namespace llvm;
 

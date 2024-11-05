@@ -2455,6 +2455,7 @@ bool CXXNameMangler::mangleUnresolvedTypeOrSimpleId(QualType Ty,
   case Type::BitInt:
   case Type::DependentBitInt:
   case Type::CountAttributed:
+  case Type::MultiReturn:
     llvm_unreachable("type is illegal as a nested name specifier");
 
   case Type::SubstTemplateTypeParmPack:
@@ -4613,6 +4614,10 @@ void CXXNameMangler::mangleType(const HLSLAttributedResourceType *T) {
     mangleType(T->getContainedType());
   }
   mangleType(T->getWrappedType());
+}
+
+void CXXNameMangler::mangleType(const MultiReturnType * T) {
+  llvm_unreachable("shouldn't need to mangle MultiReturnType!");
 }
 
 void CXXNameMangler::mangleIntegerLiteral(QualType T,

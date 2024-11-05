@@ -1041,3 +1041,12 @@ let Class = DependentBitIntType in {
     return ctx.getDependentBitIntType(isUnsigned, numBitsExpr);
   }]>;
 }
+
+let Class = MultiReturnType in {
+  def : Property<"types", Array<QualType>> {
+    let Read = [{ node->getTypes() }];
+  }
+  def : Creator<[{
+    return ctx.getMultiReturnType(types);
+  }]>;
+}

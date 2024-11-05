@@ -669,6 +669,12 @@ void AutoTypeLoc::initializeLocal(ASTContext &Context, SourceLocation Loc) {
   }
 }
 
+void MultiReturnTypeLoc::initializeLocal(ASTContext &Context, SourceLocation Loc) {
+  auto *MRT = getTypePtr();
+  for (unsigned i = 0, e = getNumTypes(); i != e; ++i)
+    setTInfo(i, Context.getTrivialTypeSourceInfo(MRT->getType(i), Loc));
+}
+
 namespace {
 
   class GetContainedAutoTypeLocVisitor :

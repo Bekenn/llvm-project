@@ -2452,6 +2452,7 @@ static TemplateDeductionResult DeduceTemplateArgumentsByTypeMatch(
     case Type::Pipe:
     case Type::ArrayParameter:
     case Type::HLSLAttributedResource:
+    case Type::MultiReturn:
       // No template argument deduction for these types
       return TemplateDeductionResult::Success;
 
@@ -6877,6 +6878,11 @@ MarkUsedTemplateParameters(ASTContext &Ctx, QualType T,
       MarkUsedTemplateParameters(
           Ctx, cast<HLSLAttributedResourceType>(T)->getContainedType(),
           OnlyDeduced, Depth, Used);
+    break;
+
+  case Type::MultiReturn:
+    for (QualType Inner : cast<MultiReturnType>(T)->getTypes())
+      MarkUsedTemplateParameters(Ctx, Inner, OnlyDeduced, Depth, Used);
     break;
 
   // None of these types have any template parameters in them.

@@ -1985,6 +1985,7 @@ private:
 
   CXXConstructorDecl *Ctor;
   ExplicitSpecifier ExplicitSpec;
+  QualType DeducedType;
   void setExplicitSpecifier(ExplicitSpecifier ES) { ExplicitSpec = ES; }
 
 public:
@@ -2011,6 +2012,19 @@ public:
   /// Get the template for which this guide performs deduction.
   TemplateDecl *getDeducedTemplate() const {
     return getDeclName().getCXXDeductionGuideTemplate();
+  }
+
+  /// Get the type that is the result of selecting this deduction guide.
+  /// This will be whichever return type is the first to satisfy all
+  /// constraints on the guide (including the deducibility constraint for
+  /// guides synthesized for alias templates).
+  QualType getDeducedType() const {
+    return DeducedType;
+  }
+
+  void setDeducedType(QualType T) {
+    assert(DeducedType.isNull() && "already set");
+    DeducedType = T;
   }
 
   /// Get the constructor from which this deduction guide was generated, if

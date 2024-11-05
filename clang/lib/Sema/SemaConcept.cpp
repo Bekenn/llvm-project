@@ -14,8 +14,12 @@
 #include "TreeTransform.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprConcepts.h"
+#include "clang/AST/Type.h"
 #include "clang/Basic/OperatorPrecedence.h"
+#include "clang/Basic/TypeTraits.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Overload.h"
@@ -26,7 +30,10 @@
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
+#include <iterator>
 #include <optional>
 
 using namespace clang;
@@ -570,10 +577,7 @@ static bool CheckConstraintSatisfaction(
     llvm::SmallVectorImpl<Expr *> &Converted,
     const MultiLevelTemplateArgumentList &TemplateArgsLists,
     SourceRange TemplateIDRange, ConstraintSatisfaction &Satisfaction) {
-  if (ConstraintExprs.empty()) {
-    Satisfaction.IsSatisfied = true;
-    return false;
-  }
+  assert(!ConstraintExprs.empty() && "empty constraints should have been handled already");
 
   if (TemplateArgsLists.isAnyArgInstantiationDependent()) {
     // No need to check satisfaction for dependent constraint expressions.
@@ -1111,6 +1115,18 @@ bool Sema::EnsureTemplateArgumentListConstraints(
   return false;
 }
 
+static void UnpackConstraints(SmallVectorImpl<const Expr *> &SplitAC,
+                              const Expr *Constraint) {
+  auto *Op = dyn_cast<BinaryOperator>(Constraint);
+  if (!Op || Op->getOpcode() != BO_LAnd) {
+    SplitAC.push_back(Constraint);
+    return;
+  }
+
+  UnpackConstraints(SplitAC, Op->getLHS());
+  UnpackConstraints(SplitAC, Op->getRHS());
+}
+
 bool Sema::CheckInstantiatedFunctionTemplateConstraints(
     SourceLocation PointOfInstantiation, FunctionDecl *Decl,
     ArrayRef<TemplateArgument> TemplateArgs,
@@ -1122,6 +1138,13 @@ bool Sema::CheckInstantiatedFunctionTemplateConstraints(
   SmallVector<const Expr *, 3> TemplateAC;
   Template->getAssociatedConstraints(TemplateAC);
   if (TemplateAC.empty()) {
+    if (auto *Guide = llvm::dyn_cast<CXXDeductionGuideDecl>(Decl)) {
+      QualType R = Guide->getReturnType();
+      if (auto *MRT = R->getAs<MultiReturnType>())
+        Guide->setDeducedType(MRT->getType(0));
+      else
+        Guide->setDeducedType(R);
+    }
     Satisfaction.IsSatisfied = true;
     return false;
   }
@@ -1147,11 +1170,82 @@ bool Sema::CheckInstantiatedFunctionTemplateConstraints(
 
   CXXThisScopeRAII ThisScope(*this, Record, ThisQuals, Record != nullptr);
   LambdaScopeForCallOperatorInstantiationRAII LambdaScope(
-      *this, const_cast<FunctionDecl *>(Decl), *MLTAL, Scope);
+      *this, Decl, *MLTAL, Scope);
 
-  llvm::SmallVector<Expr *, 1> Converted;
-  return CheckConstraintSatisfaction(Template, TemplateAC, Converted, *MLTAL,
-                                     PointOfInstantiation, Satisfaction);
+  // Handle multiple return types here. We need to check each type for
+  // constraint satisfaction; the first type that passes is the deduced return
+  // type. If we have deducibility constraints referring to multiple return
+  // types, we can substitute those using the non-dependent types we have now.
+  QualType R = Decl->getReturnType();
+  auto *MRT = R->getAs<MultiReturnType>();
+  if (!MRT) {
+    llvm::SmallVector<Expr *, 1> Converted;
+    if (CheckConstraintSatisfaction(Template, TemplateAC, Converted, *MLTAL,
+                                    PointOfInstantiation, Satisfaction))
+      return true;
+
+    if (auto *Guide = dyn_cast<CXXDeductionGuideDecl>(Decl))
+      Guide->setDeducedType(R);
+    return false;
+  }
+
+  // Check for cached constraint satisfaction. This normally happens in
+  // CheckConstrainedSatisfaction, but we need to call that multiple times
+  // (once for each return type until constraints are satisfied or we run out
+  // of return types) and can't cache the result until we're done.
+  llvm::SmallVector<TemplateArgument, 4> FlattenedArgs;
+  for (auto List : *MLTAL)
+    FlattenedArgs.insert(FlattenedArgs.end(), List.Args.begin(),
+                         List.Args.end());
+
+  llvm::FoldingSetNodeID ID;
+  ConstraintSatisfaction::Profile(ID, Context, Template, FlattenedArgs);
+  void *InsertPos;
+  if (auto *Cached = SatisfactionCache.FindNodeOrInsertPos(ID, InsertPos)) {
+    Satisfaction = *Cached;
+    return false;
+  }
+
+  // We need to examine the deducibility constraints individually, but they may
+  // be packaged together under `&&` operators. Separate them out here.
+  SmallVector<const Expr *> SplitAC;
+  SplitAC.reserve(TemplateAC.size());
+  for (const Expr *C : TemplateAC)
+    UnpackConstraints(SplitAC, C);
+
+  // Only deduction guides can have multiple return types.
+  auto *Guide = cast<CXXDeductionGuideDecl>(Decl);
+  for (QualType R : MRT->getTypes()) {
+    if (auto *Cached = SatisfactionCache.FindNodeOrInsertPos(ID, InsertPos))
+      SatisfactionCache.RemoveNode(Cached);
+    for (const Expr *&C : SplitAC) {
+      if (auto *TTE = dyn_cast<TypeTraitExpr>(C);
+          TTE && TTE->getTrait() == BTT_IsDeducible) {
+        TemplateDecl *DeducedTemplate = Guide->getDeducedTemplate();
+        TypeSourceInfo *IsDeducibleTypeTraitArgs[] = {
+            Context.getTrivialTypeSourceInfo(
+                Context.getDeducedTemplateSpecializationType(
+                    TemplateName(DeducedTemplate), /*DeducedType=*/QualType(),
+                    /*IsDependent=*/true)),
+            Context.getTrivialTypeSourceInfo(R)
+        };
+        C = TypeTraitExpr::Create(
+            Context, Context.getLogicalOperationType(), DeducedTemplate->getLocation(),
+            TypeTrait::BTT_IsDeducible, IsDeducibleTypeTraitArgs,
+            DeducedTemplate->getLocation(), /*Value*/ false);
+      }
+    }
+
+    llvm::SmallVector<Expr *, 1> Converted;
+    if (!CheckConstraintSatisfaction(Template, SplitAC, Converted, *MLTAL,
+                                     PointOfInstantiation, Satisfaction)
+        && Satisfaction.IsSatisfied) {
+      Guide->setDeducedType(R);
+      return false;
+    }
+  }
+
+  return true;
 }
 
 static void diagnoseUnsatisfiedRequirement(Sema &S,

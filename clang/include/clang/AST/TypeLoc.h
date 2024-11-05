@@ -2741,6 +2741,46 @@ class DependentBitIntTypeLoc final
     : public InheritingConcreteTypeLoc<TypeSpecTypeLoc, DependentBitIntTypeLoc,
                                        DependentBitIntType> {};
 
+struct MultiReturnTypeLocInfo {}; // nothing
+class MultiReturnTypeLoc final
+    : public ConcreteTypeLoc<UnqualTypeLoc, MultiReturnTypeLoc,
+                             MultiReturnType, MultiReturnTypeLocInfo> {
+public:
+  ArrayRef<TypeSourceInfo *> getTypeInfos() const {
+    return llvm::ArrayRef(getTInfoArray(), getNumTypes());
+  }
+
+  // ParmVarDecls* are stored after Info, one for each parameter.
+  TypeSourceInfo *const *getTInfoArray() const {
+    return static_cast<TypeSourceInfo *const *>(getExtraLocalData());
+  }
+
+  unsigned getNumTypes() const {
+    return getTypePtr()->getNumTypes();
+  }
+
+  TypeSourceInfo *getTInfo(unsigned i) const { return getTInfoArray()[i]; }
+  void setTInfo(unsigned i, TypeSourceInfo *TSI) {
+    static_cast<TypeSourceInfo **>(getExtraLocalData())[i] = TSI;
+  }
+
+  void initializeLocal(ASTContext &Context, SourceLocation Loc);
+
+  unsigned getExtraLocalDataSize() const {
+    return getNumTypes() * sizeof(TypeSourceInfo *);
+  }
+
+  unsigned getExtraLocalDataAlignment() const {
+    return alignof(TypeSourceInfo *);
+  }
+
+  SourceRange getLocalSourceRange() const {
+    ArrayRef<TypeSourceInfo *> TInfos = getTypeInfos();
+    return { TInfos.front()->getTypeLoc().getBeginLoc(),
+             TInfos.back()->getTypeLoc().getEndLoc() };
+  }
+};
+
 class ObjCProtocolLoc {
   ObjCProtocolDecl *Protocol = nullptr;
   SourceLocation Loc = SourceLocation();
