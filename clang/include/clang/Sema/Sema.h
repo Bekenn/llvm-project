@@ -4329,6 +4329,9 @@ public:
   bool shouldIgnoreInHostDeviceCheck(FunctionDecl *Callee);
 
 private:
+  /// Stack used to keep track of active CTAD deductions and prevent recursion.
+  llvm::SmallVector<llvm::hash_code> ActiveCTADDeductions;
+
   /// Function or variable declarations to be checked for whether the deferred
   /// diagnostics should be emitted.
   llvm::SmallSetVector<Decl *, 4> DeclsToCheckForDeferredDiags;
@@ -12430,6 +12433,9 @@ public:
   void DiagnoseAutoDeductionFailure(const VarDecl *VDecl, const Expr *Init);
   bool DeduceReturnType(FunctionDecl *FD, SourceLocation Loc,
                         bool Diagnose = true);
+  QualType DeduceArgTypeForTST(TemplateParameterList *TemplateParams,
+                               const TemplateSpecializationType *ParamTST,
+                               Expr *Init);
 
   bool CheckIfFunctionSpecializationIsImmediate(FunctionDecl *FD,
                                                 SourceLocation Loc);
@@ -12482,7 +12488,7 @@ public:
   /// \param Used a bit vector whose elements will be set to \c true
   /// to indicate when the corresponding template parameter will be
   /// deduced.
-  void MarkUsedTemplateParameters(const TemplateArgumentList &TemplateArgs,
+  void MarkUsedTemplateParameters(ArrayRef<TemplateArgument> TemplateArgs,
                                   bool OnlyDeduced, unsigned Depth,
                                   llvm::SmallBitVector &Used);
   void
@@ -12770,6 +12776,10 @@ public:
 
       /// We are instantiating a type alias template declaration.
       TypeAliasTemplateInstantiation,
+
+      /// We are building a new type alias template to aid in template argument
+      /// deduction during a function call.
+      BuildingTypeAliasTemplate
     } Kind;
 
     /// Was the enclosing context a non-instantiation SFINAE context?
@@ -13824,6 +13834,24 @@ public:
   SubstTemplateParams(TemplateParameterList *Params, DeclContext *Owner,
                       const MultiLevelTemplateArgumentList &TemplateArgs,
                       bool EvaluateConstraints = true);
+
+  TemplateTypeParmDecl *TransformTemplateTypeParam(
+      DeclContext *DC, TemplateTypeParmDecl *TTP,
+      MultiLevelTemplateArgumentList &Args, unsigned NewDepth,
+      unsigned NewIndex, bool EvaluateConstraint);
+
+  template <typename NonTypeTemplateOrTemplateTemplateParmDecl>
+  NonTypeTemplateOrTemplateTemplateParmDecl *
+  TransformTemplateParam(DeclContext *DC,
+                        NonTypeTemplateOrTemplateTemplateParmDecl *OldParam,
+                        MultiLevelTemplateArgumentList &Args,
+                        unsigned NewIndex, unsigned NewDepth);
+
+  NamedDecl *TransformTemplateParameter(DeclContext *DC,
+                                        NamedDecl *TemplateParam,
+                                        MultiLevelTemplateArgumentList &Args,
+                                        unsigned NewIndex, unsigned NewDepth,
+                                        bool EvaluateConstraint = true);
 
   void PerformDependentDiagnostics(
       const DeclContext *Pattern,
