@@ -1568,20 +1568,19 @@ substituteParameterMappings(Sema &S, NormalizedConstraint &N,
         new (S.Context) TemplateArgumentLoc[OccurringIndices.count()];
     for (unsigned I = 0, J = 0, C = TemplateParams->size(); I != C; ++I)
       if (OccurringIndices[I])
-        new (&(TempArgs)[J++])
-            TemplateArgumentLoc(S.getIdentityTemplateArgumentLoc(
-                TemplateParams->begin()[I],
-                // Here we assume we do not support things like
-                // template<typename A, typename B>
-                // concept C = ...;
-                //
-                // template<typename... Ts> requires C<Ts...>
-                // struct S { };
-                // The above currently yields a diagnostic.
-                // We still might have default arguments for concept parameters.
-                ArgsAsWritten->NumTemplateArgs > I
-                    ? ArgsAsWritten->arguments()[I].getLocation()
-                    : SourceLocation()));
+        TempArgs[J++] = S.getIdentityTemplateArgumentLoc(
+            TemplateParams->begin()[I],
+            // Here we assume we do not support things like
+            // template<typename A, typename B>
+            // concept C = ...;
+            //
+            // template<typename... Ts> requires C<Ts...>
+            // struct S { };
+            // The above currently yields a diagnostic.
+            // We still might have default arguments for concept parameters.
+            ArgsAsWritten->NumTemplateArgs > I
+                ? ArgsAsWritten->arguments()[I].getLocation()
+                : SourceLocation());
     Atomic.ParameterMapping.emplace(TempArgs,  OccurringIndices.count());
   }
   SourceLocation InstLocBegin =

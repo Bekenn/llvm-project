@@ -784,7 +784,7 @@ bool DiagnosticIDs::ProcessDiag(DiagnosticsEngine &Diag,
       ++Diag.TrapNumUnrecoverableErrorsOccurred;
   }
 
-  if (Diag.SuppressAllDiagnostics)
+  if (Diag.SuppressAllDiagnostics > 0)
     return false;
 
   if (DiagLevel != DiagnosticIDs::Note) {

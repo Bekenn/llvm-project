@@ -2563,7 +2563,7 @@ public:
              RedeclarableTemplateDecl::getInstantiatedFromMemberTemplate());
   }
 
-  /// Create a function template node.
+  /// Create an alias template node.
   static TypeAliasTemplateDecl *Create(ASTContext &C, DeclContext *DC,
                                        SourceLocation L,
                                        DeclarationName Name,

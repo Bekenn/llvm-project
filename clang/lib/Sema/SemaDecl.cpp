@@ -13,6 +13,7 @@
 #include "TypeLocBuilder.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/ASTFwd.h"
 #include "clang/AST/ASTLambda.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/CharUnits.h"
@@ -28,9 +29,12 @@
 #include "clang/AST/NonTrivialTypeVisitor.h"
 #include "clang/AST/Randstruct.h"
 #include "clang/AST/StmtCXX.h"
+#include "clang/AST/TemplateBase.h"
+#include "clang/AST/TemplateName.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/PartialDiagnostic.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/HeaderSearch.h" // TODO: Sema shouldn't depend on Lex
@@ -45,6 +49,7 @@
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaHLSL.h"
 #include "clang/Sema/SemaInternal.h"
@@ -55,8 +60,11 @@
 #include "clang/Sema/SemaSwift.h"
 #include "clang/Sema/SemaWasm.h"
 #include "clang/Sema/Template.h"
+#include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/STLForwardCompat.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/TargetParser/Triple.h"
@@ -12994,6 +13002,18 @@ QualType Sema::deduceVarTypeFromInitializer(VarDecl *VDecl,
 
   if (isa<DeducedTemplateSpecializationType>(Deduced)) {
     assert(VDecl && "non-auto type for init capture deduction?");
+
+    // This can recurse when deducing template arguments in a function call
+    // using CTAD to convert the function argument. If we hit recursion, bail.
+    llvm::hash_code hash = llvm::hash_combine(Deduced, Init);
+    auto I = std::find(SemaRef.ActiveCTADDeductions.begin(),
+                                    SemaRef.ActiveCTADDeductions.end(), hash);
+    if (I != SemaRef.ActiveCTADDeductions.end())
+      return QualType();
+    SemaRef.ActiveCTADDeductions.push_back(hash);
+    auto PopDeduction =
+        llvm::make_scope_exit([&]{ SemaRef.ActiveCTADDeductions.pop_back(); });
+
     InitializedEntity Entity = InitializedEntity::InitializeVariable(VDecl);
     InitializationKind Kind = InitializationKind::CreateForInit(
         VDecl->getLocation(), DirectInit, Init);
@@ -13092,6 +13112,86 @@ QualType Sema::deduceVarTypeFromInitializer(VarDecl *VDecl,
   }
 
   return DeducedType;
+}
+
+QualType Sema::DeduceArgTypeForTST(TemplateParameterList *TemplateParams,
+                                   const TemplateSpecializationType *ParamTST,
+                                   Expr *Init) {
+  QualType UndeducedParamType;
+
+  // We can avoid creating a new type alias template if ParamTST is just
+  // some way of spelling the primary template id.
+  TemplateDecl *TD = ParamTST->getTemplateName().getAsTemplateDecl();
+  ArrayRef<TemplateArgument> PrimaryArgs = TD->getTemplateParameters()
+      ->getInjectedTemplateArgs(Context);
+  TemplateDeductionInfo Info{SourceLocation()};
+  SmallVector<DeducedTemplateArgument> Deduced(TemplateParams->size());
+  if (TemplateDeductionResult Result = DeduceTemplateArguments(
+          TemplateParams, ParamTST->template_arguments(), PrimaryArgs, Info,
+          Deduced, /*NumberOfArgumentsMustMatch=*/false);
+      Result == TemplateDeductionResult::Success) {
+    UndeducedParamType = Context.getDeducedTemplateSpecializationType(
+        ParamTST->getTemplateName(), {}, false);
+  } else {
+    DeclContext *DC = TD->getDeclContext();
+    ArrayRef<TemplateArgument> TSTArgs = ParamTST->template_arguments();
+
+    LocalInstantiationScope Scope(*this);
+
+    llvm::SmallBitVector Used(TemplateParams->size());
+    MarkUsedTemplateParameters(TSTArgs, /*OnlyDeduced=*/false, 0, Used);
+    llvm::SmallVector<NamedDecl *> AliasParams;
+    AliasParams.reserve(Used.count());
+    SmallVector<TemplateArgument> InnerArgs;
+    InnerArgs.reserve(TemplateParams->size());
+    MultiLevelTemplateArgumentList MLTAL;
+    MLTAL.setKind(TemplateSubstitutionKind::Rewrite);
+    MLTAL.addOuterTemplateArguments(InnerArgs);
+    MLTAL.addOuterRetainedLevels(TemplateParams->getDepth());
+    for (unsigned I = 0, N = TemplateParams->size(); I != N; ++I) {
+      if (Used.test(I)) {
+        NamedDecl *NewParam = TransformTemplateParameter(DC,
+            TemplateParams->getParam(I), MLTAL, AliasParams.size(), 0);
+        AliasParams.push_back(NewParam);
+        InnerArgs.push_back(Context.getCanonicalTemplateArgument(
+                Context.getInjectedTemplateArg(NewParam)));
+      } else {
+        InnerArgs.push_back({});
+      }
+      MLTAL.replaceInnermostTemplateArguments(nullptr, InnerArgs);
+    }
+
+    CodeSynthesisContext ctx;
+    ctx.Kind = CodeSynthesisContext::BuildingTypeAliasTemplate;
+    ctx.PointOfInstantiation = Init->getExprLoc();
+    pushCodeSynthesisContext(ctx);
+    auto PopContext = llvm::make_scope_exit([&]{ popCodeSynthesisContext(); });
+
+    SmallVector<TemplateArgumentLoc> Args(TSTArgs.size());
+    std::transform(TSTArgs.begin(), TSTArgs.end(), Args.begin(),
+        [&](TemplateArgument Arg) {
+      return getTrivialTemplateArgumentLoc(Arg, QualType(), SourceLocation());
+    });
+    TemplateArgumentListInfo SubstArgs;
+    if (SubstTemplateArguments(Args, MLTAL, SubstArgs))
+      return QualType();
+    SmallVector<TemplateArgument> NewTSTArgs(SubstArgs.size());
+    std::transform(SubstArgs.arguments().begin(), SubstArgs.arguments().end(),
+        NewTSTArgs.begin(), [&](TemplateArgumentLoc ArgLoc) {
+      return ArgLoc.getArgument();
+    });
+
+    auto TNP = ParamTST->getTemplateName();
+    auto *ATD = Context.getEquivalentTypeAliasTemplateDecl(DC, AliasParams,
+                                                           TNP, NewTSTArgs);
+    UndeducedParamType = Context.getDeducedTemplateSpecializationType(TemplateName(ATD), QualType(), false);
+  }
+
+  Diags.setSuppressAllDiagnostics(true);
+  auto RestoreDiagnostics = llvm::make_scope_exit([&]{ Diags.setSuppressAllDiagnostics(false); });
+  auto *TSI = Context.getTrivialTypeSourceInfo(UndeducedParamType);
+  auto *VDecl = VarDecl::Create(Context, CurContext, SourceLocation(), SourceLocation(), nullptr, UndeducedParamType, TSI, SC_None);
+  return deduceVarTypeFromInitializer(VDecl, DeclarationName(), UndeducedParamType, TSI, SourceRange(), false, Init);
 }
 
 bool Sema::DeduceVariableDeclarationType(VarDecl *VDecl, bool DirectInit,

@@ -576,6 +576,7 @@ bool Sema::CodeSynthesisContext::isInstantiationRecord() const {
   case LambdaExpressionSubstitution:
   case BuildingDeductionGuides:
   case TypeAliasTemplateInstantiation:
+  case BuildingTypeAliasTemplate:
     return false;
 
   // This function should never be called when Kind's value is Memoization.
@@ -1244,6 +1245,10 @@ void Sema::PrintInstantiationStack() {
           << cast<TypeAliasTemplateDecl>(Active->Entity)
           << Active->InstantiationRange;
       break;
+    case CodeSynthesisContext::BuildingTypeAliasTemplate:
+      Diags.Report(Active->PointOfInstantiation,
+                   diag::note_building_template_type_alias_here);
+      break;
     }
   }
 }
@@ -1311,6 +1316,7 @@ std::optional<TemplateDeductionInfo *> Sema::isSFINAEContext() const {
     case CodeSynthesisContext::MarkingClassDllexported:
     case CodeSynthesisContext::BuildingBuiltinDumpStructCall:
     case CodeSynthesisContext::BuildingDeductionGuides:
+    case CodeSynthesisContext::BuildingTypeAliasTemplate:
       // This happens in a context unrelated to template instantiation, so
       // there is no SFINAE.
       return std::nullopt;

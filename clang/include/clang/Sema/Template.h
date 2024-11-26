@@ -239,7 +239,7 @@ enum class TemplateSubstitutionKind : char {
              "Replacing in an empty list?");
 
       if (!TemplateArgumentLists.empty()) {
-        assert((TemplateArgumentLists[0].AssociatedDeclAndFinal.getPointer() ||
+        assert((!TemplateArgumentLists[0].AssociatedDeclAndFinal.getPointer() ||
                 TemplateArgumentLists[0].AssociatedDeclAndFinal.getPointer() ==
                     AssociatedDecl) &&
                "Trying to change incorrect declaration?");
