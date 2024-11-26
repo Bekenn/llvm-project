@@ -299,7 +299,7 @@ private:
   bool FatalsAsError = false;
 
   // Suppress all diagnostics.
-  bool SuppressAllDiagnostics = false;
+  int8_t SuppressAllDiagnostics = 0;
 
   // Elide common types of templates.
   bool ElideType = true;
@@ -717,8 +717,8 @@ public:
   /// Suppress all diagnostics, to silence the front end when we
   /// know that we don't want any more diagnostics to be passed along to the
   /// client
-  void setSuppressAllDiagnostics(bool Val) { SuppressAllDiagnostics = Val; }
-  bool getSuppressAllDiagnostics() const { return SuppressAllDiagnostics; }
+  void setSuppressAllDiagnostics(bool Val) { SuppressAllDiagnostics += Val ? 1 : -1; }
+  bool getSuppressAllDiagnostics() const { return SuppressAllDiagnostics > 0; }
 
   /// Set type eliding, to skip outputting same types occurring in
   /// template types.

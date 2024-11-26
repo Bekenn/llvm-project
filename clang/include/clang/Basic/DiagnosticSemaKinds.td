@@ -5595,6 +5595,8 @@ def note_template_nsdmi_here : Note<
   "in instantiation of default member initializer %q0 requested here">;
 def note_template_type_alias_instantiation_here : Note<
   "in instantiation of template type alias %0 requested here">;
+def note_building_template_type_alias_here : Note<
+  "while building type alias template for deduction here">;
 def note_template_exception_spec_instantiation_here : Note<
   "in instantiation of exception specification for %0 requested here">;
 def note_template_requirement_instantiation_here : Note<

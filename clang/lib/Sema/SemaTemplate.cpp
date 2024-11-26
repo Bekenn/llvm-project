@@ -4077,7 +4077,7 @@ static void checkTemplatePartialSpecialization(Sema &S,
   //   and the template-id, the program is ill-formed.
   auto *TemplateParams = Partial->getTemplateParameters();
   llvm::SmallBitVector DeducibleParams(TemplateParams->size());
-  S.MarkUsedTemplateParameters(Partial->getTemplateArgs(), true,
+  S.MarkUsedTemplateParameters(Partial->getTemplateArgs().asArray(), true,
                                TemplateParams->getDepth(), DeducibleParams);
 
   if (!DeducibleParams.all()) {

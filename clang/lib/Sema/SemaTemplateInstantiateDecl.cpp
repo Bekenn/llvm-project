@@ -4269,6 +4269,65 @@ Sema::SubstTemplateParams(TemplateParameterList *Params, DeclContext *Owner,
   return Instantiator.SubstTemplateParams(Params);
 }
 
+
+// Transform a given template type parameter `TTP`.
+TemplateTypeParmDecl *Sema::TransformTemplateTypeParam(
+    DeclContext *DC, TemplateTypeParmDecl *TTP,
+    MultiLevelTemplateArgumentList &Args, unsigned NewDepth, unsigned NewIndex,
+    bool PreserveConstraint) {
+  // TemplateTypeParmDecl's index cannot be changed after creation, so
+  // substitute it directly.
+  auto *NewTTP = TemplateTypeParmDecl::Create(
+      Context, DC, TTP->getBeginLoc(), TTP->getLocation(), NewDepth,
+      NewIndex, TTP->getIdentifier(), TTP->wasDeclaredWithTypename(),
+      TTP->isParameterPack(), PreserveConstraint && TTP->hasTypeConstraint(),
+      TTP->isExpandedParameterPack()
+          ? std::optional<unsigned>(TTP->getNumExpansionParameters())
+          : std::nullopt);
+  if (PreserveConstraint)
+    if (const auto *TC = TTP->getTypeConstraint())
+      SubstTypeConstraint(NewTTP, TC, Args,
+                          /*EvaluateConstraint=*/true);
+  if (TTP->hasDefaultArgument()) {
+    TemplateArgumentLoc InstantiatedDefaultArg;
+    if (!SubstTemplateArgument(TTP->getDefaultArgument(), Args,
+        InstantiatedDefaultArg, TTP->getDefaultArgumentLoc(),
+        TTP->getDeclName()))
+      NewTTP->setDefaultArgument(Context, InstantiatedDefaultArg);
+  }
+  CurrentInstantiationScope->InstantiatedLocal(TTP, NewTTP);
+  return NewTTP;
+}
+
+// Similar to above, but for non-type template or template template parameters.
+template <typename NonTypeTemplateOrTemplateTemplateParmDecl>
+NonTypeTemplateOrTemplateTemplateParmDecl *Sema::TransformTemplateParam(
+    DeclContext *DC, NonTypeTemplateOrTemplateTemplateParmDecl *OldParam,
+    MultiLevelTemplateArgumentList &Args, unsigned NewIndex,
+    unsigned NewDepth) {
+  // Ask the template instantiator to do the heavy lifting for us, then adjust
+  // the index of the parameter once it's done.
+  auto *NewParam = cast<NonTypeTemplateOrTemplateTemplateParmDecl>(
+      SubstDecl(OldParam, DC, Args));
+  NewParam->setPosition(NewIndex);
+  NewParam->setDepth(NewDepth);
+  return NewParam;
+}
+
+NamedDecl *Sema::TransformTemplateParameter(
+    DeclContext *DC, NamedDecl *TemplateParam,
+    MultiLevelTemplateArgumentList &Args, unsigned NewIndex, unsigned NewDepth,
+    bool PreserveConstraint) {
+  if (auto *TTP = dyn_cast<TemplateTypeParmDecl>(TemplateParam))
+    return TransformTemplateTypeParam(DC, TTP, Args, NewDepth, NewIndex,
+                                      PreserveConstraint);
+  if (auto *TTP = dyn_cast<TemplateTemplateParmDecl>(TemplateParam))
+    return TransformTemplateParam(DC, TTP, Args, NewIndex, NewDepth);
+  if (auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(TemplateParam))
+    return TransformTemplateParam(DC, NTTP, Args, NewIndex, NewDepth);
+  llvm_unreachable("Unhandled template parameter types");
+}
+
 /// Instantiate the declaration of a class template partial
 /// specialization.
 ///

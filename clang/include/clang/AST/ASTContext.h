@@ -591,6 +591,12 @@ private:
 
   llvm::DenseMap<FieldDecl *, FieldDecl *> InstantiatedFromUnnamedFieldDecl;
 
+  /// Mapping from a canonical TemplateSpecializationType to a type alias
+  /// template that can be used to deduce template arguments from a function
+  /// parameter type during argument deduction from a furnction call.
+  llvm::DenseMap<const TemplateSpecializationType *, TypeAliasTemplateDecl *>
+    TypeAliasForFunctionParameterTypeDeduction;
+
   /// Mapping that stores the methods overridden by a given C++
   /// member function.
   ///
@@ -1783,6 +1789,12 @@ public:
   getTemplateSpecializationTypeInfo(TemplateName T, SourceLocation TLoc,
                                     const TemplateArgumentListInfo &Args,
                                     QualType Canon = QualType()) const;
+
+  TypeAliasTemplateDecl *
+  getEquivalentTypeAliasTemplateDecl(DeclContext *DC,
+                                     ArrayRef<NamedDecl *> TemplateParams,
+                                     TemplateName T,
+                                     ArrayRef<TemplateArgument> Args);
 
   QualType getParenType(QualType NamedType) const;
 

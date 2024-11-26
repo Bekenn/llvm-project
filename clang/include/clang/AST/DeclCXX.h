@@ -2023,7 +2023,10 @@ public:
   }
 
   void setDeducedType(QualType T) {
-    assert(DeducedType.isNull() && "already set");
+    if (!DeducedType.isNull()) {
+      assert(T == DeducedType && "guide deduced type mismatch");
+      return;
+    }
     DeducedType = T;
   }
 

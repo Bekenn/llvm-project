@@ -179,6 +179,8 @@ public:
     return false;
   }
 
+  bool paramHasDefaultArgument(unsigned Idx) const;
+
   /// The constraint-expression of the associated requires-clause.
   Expr *getRequiresClause() {
     return HasRequiresClause ? getTrailingObjects<Expr *>()[0] : nullptr;
@@ -2565,7 +2567,7 @@ public:
              RedeclarableTemplateDecl::getInstantiatedFromMemberTemplate());
   }
 
-  /// Create a function template node.
+  /// Create an alias template node.
   static TypeAliasTemplateDecl *Create(ASTContext &C, DeclContext *DC,
                                        SourceLocation L,
                                        DeclarationName Name,

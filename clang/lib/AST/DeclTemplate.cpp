@@ -123,6 +123,16 @@ bool TemplateParameterList::containsUnexpandedParameterPack() const {
   return false;
 }
 
+bool TemplateParameterList::paramHasDefaultArgument(unsigned Idx) const {
+  assert(Idx < size() && "Template parameter index out-of-range");
+  const NamedDecl *Param = begin()[Idx];
+  if (auto *TPDecl = dyn_cast<TemplateTypeParmDecl>(Param))
+    return TPDecl->hasDefaultArgument();
+  if (auto *NTTPDecl = dyn_cast<NonTypeTemplateParmDecl>(Param))
+    return NTTPDecl->hasDefaultArgument();
+  return cast<TemplateTemplateParmDecl>(Param)->hasDefaultArgument();
+}
+
 TemplateParameterList *
 TemplateParameterList::Create(const ASTContext &C, SourceLocation TemplateLoc,
                               SourceLocation LAngleLoc,

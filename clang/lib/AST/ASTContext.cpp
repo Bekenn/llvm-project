@@ -5583,6 +5583,27 @@ QualType ASTContext::getCanonicalTemplateSpecializationType(
   return QualType(Spec, 0);
 }
 
+TypeAliasTemplateDecl *
+ASTContext::getEquivalentTypeAliasTemplateDecl(
+    DeclContext *DC, ArrayRef<NamedDecl *> TemplateParams, TemplateName T,
+    ArrayRef<TemplateArgument> Args) {
+  auto *TST = getCanonicalTemplateSpecializationType(T, Args)
+      ->castAs<TemplateSpecializationType>();
+  auto I = TypeAliasForFunctionParameterTypeDeduction.find(TST);
+  if (I != TypeAliasForFunctionParameterTypeDeduction.end())
+    return I->second;
+
+  auto *AD = TypeAliasDecl::Create(*this, DC, {}, {}, nullptr,
+                                   getTrivialTypeSourceInfo(QualType(TST, 0)));
+  auto *AliasParamList = TemplateParameterList::Create(*this, {}, {},
+                                                       TemplateParams, {},
+                                                       nullptr);
+  auto *Decl = TypeAliasTemplateDecl::Create(*this, DC, {}, {}, AliasParamList,
+                                             AD);
+  TypeAliasForFunctionParameterTypeDeduction.try_emplace(TST, Decl);
+  return Decl;
+}
+
 QualType ASTContext::getElaboratedType(ElaboratedTypeKeyword Keyword,
                                        NestedNameSpecifier *NNS,
                                        QualType NamedType,

@@ -29,8 +29,10 @@
 #include "clang/Sema/SemaObjC.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/FoldingSet.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/STLForwardCompat.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -9842,6 +9844,19 @@ QualType Sema::DeduceTemplateSpecializationFromInitializer(
         << TSInfo->getTypeLoc().getSourceRange() << 0;
     return SubstAutoTypeDependent(TSInfo->getType());
   }
+
+  // This can recurse when deducing template arguments in a function call
+  // using CTAD to convert the function argument. If we hit recursion, bail.
+  llvm::hash_code hash = llvm::hash_combine(
+      LookupTemplateDecl->getCanonicalDecl(),
+      llvm::hash_combine_range(Inits.begin(), Inits.end()));
+  auto I = std::find(SemaRef.ActiveCTADDeductions.begin(),
+                                  SemaRef.ActiveCTADDeductions.end(), hash);
+  if (I != SemaRef.ActiveCTADDeductions.end())
+    return QualType();
+  SemaRef.ActiveCTADDeductions.push_back(hash);
+  auto PopDeduction =
+      llvm::make_scope_exit([&]{ SemaRef.ActiveCTADDeductions.pop_back(); });
 
   // FIXME: Perform "exact type" matching first, per CWG discussion?
   //        Or implement this via an implied 'T(T) -> T' deduction guide?
