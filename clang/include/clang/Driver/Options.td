@@ -5926,6 +5926,9 @@ def target : Joined<["--"], "target=">, Flags<[NoXarchOption]>,
 def darwin_target_variant : Separate<["-"], "darwin-target-variant">,
   Flags<[NoXarchOption]>, Visibility<[ClangOption, CLOption]>,
   HelpText<"Generate code for an additional runtime variant of the deployment target">;
+def p2998 : Flag<["-"], "p2998">, Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Enable features from P2998: Alias template guides, multi-return types, "
+           "extra deduction for function parameters.">;
 
 //===----------------------------------------------------------------------===//
 // Print CPU info options (clang, clang-cl, flang)

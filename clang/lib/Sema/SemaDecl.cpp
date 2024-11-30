@@ -5818,9 +5818,10 @@ Sema::GetNameFromUnqualifiedId(const UnqualifiedId &Name) {
     // P2998 relaxes these rules to allow deduction guides for alias templates.
     TemplateName TN = Name.TemplateName.get().get();
     auto *Template = TN.getAsTemplateDecl();
-    if (!Template || (!isa<ClassTemplateDecl>(Template) && !isa<TypeAliasTemplateDecl>(Template))) {
+    if (!Template || (!isa<ClassTemplateDecl>(Template) &&
+            (!getLangOpts().P2998 || !isa<TypeAliasTemplateDecl>(Template)))) {
       Diag(Name.StartLocation,
-           diag::err_deduction_guide_name_not_class_template)
+           diag::err_deduction_guide_name_not_deducible_template)
         << (int)getTemplateNameKindForDiagnostics(TN) << TN;
       if (Template)
         NoteTemplateLocation(*Template);

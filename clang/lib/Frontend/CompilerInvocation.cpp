@@ -3632,6 +3632,9 @@ void CompilerInvocationBase::GenerateLangArgs(const LangOptions &Opts,
   auto LangStandard = LangStandard::getLangStandardForKind(Opts.LangStd);
   GenerateArg(Consumer, StdOpt, LangStandard.getName());
 
+  if (Opts.P2998)
+    GenerateArg(Consumer, OPT_p2998);
+
   if (Opts.IncludeDefaultHeader)
     GenerateArg(Consumer, OPT_finclude_default_header);
   if (Opts.DeclareOpenCLBuiltins)
@@ -3988,6 +3991,8 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.DeclareOpenCLBuiltins = Args.hasArg(OPT_fdeclare_opencl_builtins);
 
   LangOptions::setLangDefaults(Opts, IK.getLanguage(), T, Includes, LangStd);
+
+  Opts.P2998 = Args.hasArg(OPT_p2998);
 
   // The key paths of codegen options defined in Options.td start with
   // "LangOpts->". Let's provide the expected variable name and type.

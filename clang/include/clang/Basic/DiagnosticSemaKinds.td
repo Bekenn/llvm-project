@@ -2607,7 +2607,7 @@ def err_deduction_guide_with_complex_decl : Error<
   "declaration of a deduction guide">;
 def err_deduction_guide_invalid_specifier : Error<
   "deduction guide cannot be declared '%0'">;
-def err_deduction_guide_name_not_class_template : Error<
+def err_deduction_guide_name_not_deducible_template : Error<
   "cannot specify deduction guide for "
   "%select{<error>|function template|variable template|alias template|"
   "template template parameter|concept|dependent template name}0 %1">;
