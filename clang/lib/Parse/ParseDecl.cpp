@@ -18,6 +18,7 @@
 #include "clang/Basic/Attributes.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/DiagnosticParse.h"
+#include "clang/Basic/LangOptions.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TokenKinds.h"
 #include "clang/Parse/Parser.h"
@@ -34,6 +35,7 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Option/Option.h"
 #include <optional>
 
 using namespace clang;
@@ -7703,7 +7705,7 @@ void Parser::ParseFunctionDeclarator(Declarator &D,
         LocalEndLoc = Tok.getLocation();
         SourceRange Range;
         TrailingReturnType =
-          D.getName().getKind() == UnqualifiedIdKind::IK_DeductionGuideName
+          getLangOpts().P2998 && D.getName().getKind() == UnqualifiedIdKind::IK_DeductionGuideName
             ? ParseTrailingReturnTypes(Range, D.mayBeFollowedByCXXDirectInit())
             : ParseTrailingReturnType(Range, D.mayBeFollowedByCXXDirectInit());
         TrailingReturnTypeLoc = Range.getBegin();

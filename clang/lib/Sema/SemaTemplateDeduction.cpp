@@ -4375,18 +4375,20 @@ static TemplateDeductionResult DeduceFromInitializerList(
   if (ArrTy)
     ElTy = ArrTy->getElementType();
   else if (!S.isStdInitializerList(AdjustedParamType, &ElTy)) {
-    if (auto ParamTST = AdjustedParamType->getAs<TemplateSpecializationType>()) {
-      QualType ArgType = S.DeduceArgTypeForTST(TemplateParams, ParamTST, ILE);
-      if (ArgType.isNull())
-        return TemplateDeductionResult::NonDeducedMismatch;
-      if (auto Result = DeduceTemplateArgumentsByTypeMatch(S, TemplateParams,
-              AdjustedParamType, ArgType, Info, Deduced, TDF,
-              PartialOrderingKind::None, /*DeducedFromArrayBound=*/false,
-              /*HasDeducedAnyParam=*/nullptr);
-          Result != TemplateDeductionResult::Success)
-        return Result;
-      OriginalCallArgs.push_back(
-          Sema::OriginalCallArg(OrigParamType, false, ArgIdx, ArgType));
+    if (S.getLangOpts().P2998) {
+      if (auto *ParamTST = AdjustedParamType->getAs<TemplateSpecializationType>()) {
+        QualType ArgType = S.DeduceArgTypeForTST(TemplateParams, ParamTST, ILE);
+        if (ArgType.isNull())
+          return TemplateDeductionResult::NonDeducedMismatch;
+        if (auto Result = DeduceTemplateArgumentsByTypeMatch(S, TemplateParams,
+                AdjustedParamType, ArgType, Info, Deduced, TDF,
+                PartialOrderingKind::None, /*DeducedFromArrayBound=*/false,
+                /*HasDeducedAnyParam=*/nullptr);
+            Result != TemplateDeductionResult::Success)
+          return Result;
+        OriginalCallArgs.push_back(
+            Sema::OriginalCallArg(OrigParamType, false, ArgIdx, ArgType));
+      }
     }
 
     //   Otherwise, an initializer list argument causes the parameter to be
@@ -4470,7 +4472,8 @@ static TemplateDeductionResult DeduceTemplateArgumentsFromCallArgument(
           PartialOrderingKind::None, /*DeducedFromArrayBound=*/false,
           /*HasDeducedAnyParam=*/nullptr);
       Result != TemplateDeductionResult::Success) {
-    if (Result != TemplateDeductionResult::NonDeducedMismatch)
+    if (!S.getLangOpts().P2998 ||
+        Result != TemplateDeductionResult::NonDeducedMismatch)
       return Result;
     auto *ParamTST = ParamType->getAs<TemplateSpecializationType>();
     if (!ParamTST) {
