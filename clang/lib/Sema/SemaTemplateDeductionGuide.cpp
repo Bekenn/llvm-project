@@ -39,12 +39,14 @@
 #include "clang/Sema/Overload.h"
 #include "clang/Sema/Ownership.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -191,11 +193,11 @@ public:
   }
 };
 
-// Build a deduction guide using the provided information.
-//
-// A deduction guide can be either a template or a non-template function
-// declaration. If \p TemplateParams is null, a non-template function
-// declaration will be created.
+/// Build a deduction guide using the provided information.
+///
+/// A deduction guide can be either a template or a non-template function
+/// declaration. If \p TemplateParams is null, a non-template function
+/// declaration will be created.
 NamedDecl *buildDeductionGuide(
     Sema &SemaRef, TemplateDecl *OriginalTemplate,
     TemplateParameterList *TemplateParams, CXXConstructorDecl *Ctor,
@@ -237,6 +239,13 @@ NamedDecl *buildDeductionGuide(
 
   if (isa<CXXRecordDecl>(DC))
     GuideTemplate->setAccess(AS_public);
+
+  // Check that all template parameters can be deduced; if not, the guide is
+  // non-viable and need not be included in the set of guides.
+  llvm::SmallBitVector DeducedParams;
+  SemaRef.MarkDeducedTemplateParameters(GuideTemplate, DeducedParams);
+  if (!DeducedParams.all())
+    return nullptr;
 
   DC->addDecl(GuideTemplate);
   return GuideTemplate;
@@ -1200,15 +1209,17 @@ void BuildDeductionGuidesForTypeAlias(Sema &SemaRef,
         Elements.TemplateParams,
         AliasTemplate->getTemplateParameters()->getRAngleLoc(),
         Elements.RequiresClause);
-    auto *Result = cast<FunctionTemplateDecl>(buildDeductionGuide(
+    auto *Result = cast_if_present<FunctionTemplateDecl>(buildDeductionGuide(
         SemaRef, AliasTemplate, FPrimeTemplateParamList,
-        Elements.FPrime->getCorrespondingConstructor(), Elements.FPrime->getExplicitSpecifier(),
-        FPrimeTSI, AliasTemplate->getBeginLoc(),
-        AliasTemplate->getLocation(), AliasTemplate->getEndLoc(),
-        FTD->isImplicit()));
-    cast<CXXDeductionGuideDecl>(Result->getTemplatedDecl())
-        ->setDeductionCandidateKind(Elements.FPrime->getDeductionCandidateKind());
-    Results.push_back(Result);
+        Elements.FPrime->getCorrespondingConstructor(),
+        Elements.FPrime->getExplicitSpecifier(), FPrimeTSI,
+        AliasTemplate->getBeginLoc(), AliasTemplate->getLocation(),
+        AliasTemplate->getEndLoc(), FTD->isImplicit()));
+    if (Result) {
+      cast<CXXDeductionGuideDecl>(Result->getTemplatedDecl())
+          ->setDeductionCandidateKind(Elements.FPrime->getDeductionCandidateKind());
+      Results.push_back(Result);
+    }
   }
 }
 
@@ -1429,7 +1440,9 @@ void Sema::DeclareImplicitDeductionGuides(TemplateDecl *Template,
   // Convert declared constructors into deduction guide templates.
   // FIXME: Skip constructors for which deduction must necessarily fail (those
   // for which some class template parameter without a default argument never
-  // appears in a deduced context).
+  // appears in a deduced context). Guides generated from those constructors
+  // will be pruned from the set, but it would be better to avoid creating them
+  // in the first place.
   ClassTemplateDecl *Pattern =
       Transform.NestedPattern ? Transform.NestedPattern : Transform.Template;
   ContextRAII SavedContext(*this, Pattern->getTemplatedDecl());
@@ -1449,11 +1462,10 @@ void Sema::DeclareImplicitDeductionGuides(TemplateDecl *Template,
       continue;
 
     auto *FTD = dyn_cast<FunctionTemplateDecl>(D);
-    auto *CD =
-        dyn_cast_or_null<CXXConstructorDecl>(FTD ? FTD->getTemplatedDecl() : D);
+    auto *CD = cast<CXXConstructorDecl>(FTD ? FTD->getTemplatedDecl() : D);
     // Class-scope explicit specializations (MS extension) do not result in
     // deduction guides.
-    if (!CD || (!FTD && CD->isFunctionTemplateSpecialization()))
+    if (!FTD && CD->isFunctionTemplateSpecialization())
       continue;
 
     // Cannot make a deduction guide when unparsed arguments are present.

@@ -4109,13 +4109,6 @@ void Sema::CheckDeductionGuideTemplate(FunctionTemplateDecl *TD) {
   auto *TemplateParams = TD->getTemplateParameters();
   llvm::SmallBitVector DeducibleParams(TemplateParams->size());
   MarkDeducedTemplateParameters(TD, DeducibleParams);
-  for (unsigned I = 0; I != TemplateParams->size(); ++I) {
-    // A parameter pack is deducible (to an empty pack).
-    auto *Param = TemplateParams->getParam(I);
-    if (Param->isParameterPack() || hasVisibleDefaultArgument(Param))
-      DeducibleParams[I] = true;
-  }
-
   if (!DeducibleParams.all()) {
     unsigned NumNonDeducible = DeducibleParams.size() - DeducibleParams.count();
     Diag(TD->getLocation(), diag::err_deduction_guide_template_not_deducible)

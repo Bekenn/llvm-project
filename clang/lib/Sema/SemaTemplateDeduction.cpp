@@ -7014,6 +7014,21 @@ Sema::MarkUsedTemplateParameters(ArrayRef<TemplateArgument> TemplateArgs,
                                  Depth, Used);
 }
 
+void Sema::MarkDeducedTemplateParameters(const FunctionTemplateDecl *FunctionTemplate,
+                              llvm::SmallBitVector &Deduced) {
+  MarkDeducedTemplateParameters(Context, FunctionTemplate, Deduced);
+
+  auto *TemplateParams = FunctionTemplate->getTemplateParameters();
+  for (unsigned I = 0; I != TemplateParams->size(); ++I) {
+    if (Deduced[I])
+      continue;
+    // A parameter pack is deducible (to an empty pack).
+    auto *Param = TemplateParams->getParam(I);
+    if (Param->isParameterPack() || hasVisibleDefaultArgument(Param))
+      Deduced[I] = true;
+  }
+}
+
 void Sema::MarkDeducedTemplateParameters(
     ASTContext &Ctx, const FunctionTemplateDecl *FunctionTemplate,
     llvm::SmallBitVector &Deduced) {

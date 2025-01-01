@@ -12496,14 +12496,16 @@ public:
   void MarkUsedTemplateParameters(ArrayRef<TemplateArgument> TemplateArgs,
                                   bool OnlyDeduced, unsigned Depth,
                                   llvm::SmallBitVector &Used);
-  void
-  MarkDeducedTemplateParameters(const FunctionTemplateDecl *FunctionTemplate,
-                                llvm::SmallBitVector &Deduced) {
-    return MarkDeducedTemplateParameters(Context, FunctionTemplate, Deduced);
-  }
 
   /// Marks all of the template parameters that will be deduced by a
   /// call to the given function template.
+  void
+  MarkDeducedTemplateParameters(const FunctionTemplateDecl *FunctionTemplate,
+                                llvm::SmallBitVector &Deduced);
+
+  /// Marks all of the template parameters that will be deduced by a
+  /// call to the given function template, except those determined by
+  /// default template arguments.
   static void
   MarkDeducedTemplateParameters(ASTContext &Ctx,
                                 const FunctionTemplateDecl *FunctionTemplate,
