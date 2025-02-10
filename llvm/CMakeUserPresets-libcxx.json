@@ -1,0 +1,40 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "Xcode",
+            "generator": "Xcode",
+            "toolchainFile": "$env{HOME}/.vcpkg/scripts/buildsystems/vcpkg.cmake",
+            "binaryDir": "../build-xcode",
+            "cacheVariables": {
+                "CMAKE_OSX_ARCHITECTURES": "arm64",
+                "LLVM_TARGETS_TO_BUILD": "host",
+                "LLVM_ENABLE_PROJECTS": "clang;libc",
+                "LLVM_ENABLE_RUNTIMES": "libcxx;libcxxabi;libunwind",
+                "LLVM_OPTIMIZED_TABLEGEN": true
+            },
+            "warnings": {
+                "dev": false
+            }
+        },
+        {
+            "name": "Ninja",
+            "generator": "Ninja",
+            "toolchainFile": "$env{HOME}/.vcpkg/scripts/buildsystems/vcpkg.cmake",
+            "binaryDir": "../build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_OSX_ARCHITECTURES": "arm64",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+                "LLVM_TARGETS_TO_BUILD": "host",
+                "LLVM_ENABLE_PROJECTS": "clang;libc",
+                "LLVM_ENABLE_RUNTIMES": "libcxx;libcxxabi;libunwind",
+                "LLVM_ENABLE_ASSERTIONS": true,
+                "LLVM_OPTIMIZED_TABLEGEN": true
+            },
+            "warnings": {
+                "dev": false
+            }
+        }
+    ]
+}
